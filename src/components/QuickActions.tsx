@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef } from "react";
+import Image from "next/image";
 import {
   Server,
   Database,
@@ -56,13 +57,15 @@ export default function QuickActions() {
     }).format(amount);
   };
 
-  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportCSV = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const csvData = e.target?.result as string;
-        importFromCSV(csvData);
+        await importFromCSV(csvData);
       };
       reader.readAsText(file);
     }
@@ -91,9 +94,9 @@ export default function QuickActions() {
     },
     {
       id: "compute-intensive",
-      name: "Compute Intensive",
-      description: "C3-standard-8, Spot pricing",
-      estimatedCost: "~$45/month",
+      name: "GPU Compute",
+      description: "A2-highgpu-1g, Spot pricing",
+      estimatedCost: "~$245/month",
       icon: Cpu,
       onClick: () => addPresetConfiguration("compute-intensive"),
     },
@@ -306,8 +309,14 @@ export default function QuickActions() {
             disabled
           >
             <div className="flex items-start gap-3 w-full">
-              <div className="flex items-center justify-center w-8 h-8 bg-orange-100 rounded-lg">
-                <span className="text-orange-600 font-bold text-sm">AWS</span>
+              <div className="flex items-center justify-center w-8 h-8 bg-orange-50 rounded-lg border border-orange-200">
+                <Image
+                  src="/images/icons8-aws.svg"
+                  alt="AWS Logo"
+                  width={20}
+                  height={20}
+                  className="object-contain"
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm">Amazon Web Services</div>
@@ -327,8 +336,14 @@ export default function QuickActions() {
             disabled
           >
             <div className="flex items-start gap-3 w-full">
-              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-lg">
-                <span className="text-blue-600 font-bold text-xs">Azure</span>
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-50 rounded-lg border border-blue-200">
+                <Image
+                  src="/images/icons8-azure.svg"
+                  alt="Azure Logo"
+                  width={20}
+                  height={20}
+                  className="object-contain"
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm">Microsoft Azure</div>

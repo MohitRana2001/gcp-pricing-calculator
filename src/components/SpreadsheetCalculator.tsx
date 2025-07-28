@@ -2,14 +2,17 @@
 
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Trash2, Plus, Settings } from "lucide-react";
+import { Copy, Trash2, Plus, Settings, Zap } from "lucide-react";
 import { useVmStore } from "@/store/vmStore";
 import {
   REGIONS,
   MACHINE_SERIES,
   MACHINE_TYPES,
+  OPERATING_SYSTEMS,
   DISK_TYPES,
   DISCOUNT_MODELS,
+  seriesSupportsGpu,
+  getAvailableGpuTypes,
 } from "@/lib/calculator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,8 +63,12 @@ export default function SpreadsheetCalculator() {
       isCustom: false,
       vcpus: 2,
       memory: 8,
+      operatingSystem: "Linux",
+      runningHours: 730,
+      quantity: 1,
       diskType: "Balanced",
       diskSize: 50,
+      hasGpu: false,
       discountModel: "On-Demand",
     });
   };
@@ -90,13 +97,15 @@ export default function SpreadsheetCalculator() {
     }
   };
 
-  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportCSV = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const csvData = e.target?.result as string;
-        importFromCSV(csvData);
+        await importFromCSV(csvData);
       };
       reader.readAsText(file);
     }
@@ -174,20 +183,38 @@ export default function SpreadsheetCalculator() {
                 <th className="min-w-[140px] p-3 text-left font-semibold">
                   Region
                 </th>
-                <th className="min-w-[130px] p-3 text-left font-semibold">
-                  Machine Series
+                <th className="min-w-[140px] p-3 text-left font-semibold">
+                  Compute Series
                 </th>
                 <th className="min-w-[160px] p-3 text-left font-semibold">
-                  Machine Type
+                  Instance Type
                 </th>
                 <th className="min-w-[80px] p-3 text-left font-semibold">
                   Custom
+                </th>
+                <th className="min-w-[160px] p-3 text-left font-semibold">
+                  Operating System
                 </th>
                 <th className="min-w-[100px] p-3 text-left font-semibold">
                   vCPU
                 </th>
                 <th className="min-w-[120px] p-3 text-left font-semibold">
-                  Memory (GB)
+                  RAM (GB)
+                </th>
+                <th className="min-w-[130px] p-3 text-left font-semibold">
+                  Running Hrs
+                </th>
+                <th className="min-w-[100px] p-3 text-left font-semibold">
+                  Quantity
+                </th>
+                <th className="min-w-[80px] p-3 text-left font-semibold">
+                  GPU
+                </th>
+                <th className="min-w-[140px] p-3 text-left font-semibold">
+                  GPU Type
+                </th>
+                <th className="min-w-[100px] p-3 text-left font-semibold">
+                  GPU Count
                 </th>
                 <th className="min-w-[120px] p-3 text-left font-semibold">
                   Disk Type
@@ -248,7 +275,7 @@ export default function SpreadsheetCalculator() {
                       </Select>
                     </td>
 
-                    {/* Series */}
+                    {/* Compute Series */}
                     <td className="p-3">
                       <Select
                         value={config.machineSeries}
@@ -263,14 +290,19 @@ export default function SpreadsheetCalculator() {
                         <SelectContent>
                           {MACHINE_SERIES.map((series) => (
                             <SelectItem key={series} value={series}>
-                              {series}
+                              <div className="flex items-center gap-2">
+                                {seriesSupportsGpu(series) && (
+                                  <Zap className="h-3 w-3 text-yellow-500" />
+                                )}
+                                {series}
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </td>
 
-                    {/* Machine Type */}
+                    {/* Instance Type */}
                     <td className="p-3">
                       {config.isCustom ? (
                         <div className="flex items-center gap-2 h-8 px-3 py-2 text-sm bg-muted rounded-md">
@@ -308,6 +340,27 @@ export default function SpreadsheetCalculator() {
                           handleInputChange(config.id, "isCustom", checked)
                         }
                       />
+                    </td>
+
+                    {/* Operating System */}
+                    <td className="p-3">
+                      <Select
+                        value={config.operatingSystem}
+                        onValueChange={(value) =>
+                          handleInputChange(config.id, "operatingSystem", value)
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {OPERATING_SYSTEMS.map((os) => (
+                            <SelectItem key={os} value={os}>
+                              {os}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </td>
 
                     {/* vCPU */}
@@ -378,6 +431,161 @@ export default function SpreadsheetCalculator() {
                       )}
                     </td>
 
+                    {/* Running Hours */}
+                    <td className="p-3">
+                      {editingCell?.configId === config.id &&
+                      editingCell?.field === "runningHours" ? (
+                        <Input
+                          type="number"
+                          value={config.runningHours}
+                          onChange={(e) =>
+                            handleInputChange(
+                              config.id,
+                              "runningHours",
+                              parseInt(e.target.value) || 1
+                            )
+                          }
+                          onBlur={handleCellBlur}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleCellBlur()
+                          }
+                          className="h-8 text-sm"
+                          min="1"
+                          max="744"
+                          autoFocus
+                        />
+                      ) : (
+                        <button
+                          onClick={() =>
+                            handleCellClick(config.id, "runningHours")
+                          }
+                          className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                        >
+                          {config.runningHours}
+                        </button>
+                      )}
+                    </td>
+
+                    {/* Quantity */}
+                    <td className="p-3">
+                      {editingCell?.configId === config.id &&
+                      editingCell?.field === "quantity" ? (
+                        <Input
+                          type="number"
+                          value={config.quantity}
+                          onChange={(e) =>
+                            handleInputChange(
+                              config.id,
+                              "quantity",
+                              parseInt(e.target.value) || 1
+                            )
+                          }
+                          onBlur={handleCellBlur}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleCellBlur()
+                          }
+                          className="h-8 text-sm"
+                          min="1"
+                          max="1000"
+                          autoFocus
+                        />
+                      ) : (
+                        <button
+                          onClick={() => handleCellClick(config.id, "quantity")}
+                          className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                        >
+                          {config.quantity}
+                        </button>
+                      )}
+                    </td>
+
+                    {/* Has GPU */}
+                    <td className="p-3">
+                      <Checkbox
+                        checked={config.hasGpu}
+                        onCheckedChange={(checked) =>
+                          handleInputChange(config.id, "hasGpu", checked)
+                        }
+                        disabled={!seriesSupportsGpu(config.machineSeries)}
+                      />
+                    </td>
+
+                    {/* GPU Type */}
+                    <td className="p-3">
+                      {config.hasGpu &&
+                      seriesSupportsGpu(config.machineSeries) ? (
+                        <Select
+                          value={config.gpuType || ""}
+                          onValueChange={(value) =>
+                            handleInputChange(config.id, "gpuType", value)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Select GPU" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getAvailableGpuTypes(config.machineSeries).map(
+                              (gpu) => (
+                                <SelectItem key={gpu} value={gpu}>
+                                  {gpu}
+                                </SelectItem>
+                              )
+                            )}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="h-8 px-3 py-2 text-sm text-muted-foreground">
+                          {seriesSupportsGpu(config.machineSeries)
+                            ? "No GPU"
+                            : "N/A"}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* GPU Count */}
+                    <td className="p-3">
+                      {config.hasGpu &&
+                      seriesSupportsGpu(config.machineSeries) ? (
+                        editingCell?.configId === config.id &&
+                        editingCell?.field === "gpuCount" ? (
+                          <Input
+                            type="number"
+                            value={config.gpuCount || 1}
+                            onChange={(e) =>
+                              handleInputChange(
+                                config.id,
+                                "gpuCount",
+                                parseInt(e.target.value) || 1
+                              )
+                            }
+                            onBlur={handleCellBlur}
+                            onKeyDown={(e) =>
+                              e.key === "Enter" && handleCellBlur()
+                            }
+                            className="h-8 text-sm"
+                            min="1"
+                            max="8"
+                            autoFocus
+                          />
+                        ) : (
+                          <button
+                            onClick={() =>
+                              handleCellClick(config.id, "gpuCount")
+                            }
+                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                          >
+                            {config.gpuCount || 1}
+                          </button>
+                        )
+                      ) : (
+                        <div className="h-8 px-3 py-2 text-sm text-muted-foreground">
+                          {seriesSupportsGpu(config.machineSeries)
+                            ? "0"
+                            : "N/A"}
+                        </div>
+                      )}
+                    </td>
+
                     {/* Disk Type */}
                     <td className="p-3">
                       <Select
@@ -432,7 +640,7 @@ export default function SpreadsheetCalculator() {
                       )}
                     </td>
 
-                    {/* Discount */}
+                    {/* Discount Model */}
                     <td className="p-3">
                       <Select
                         value={config.discountModel}
@@ -464,6 +672,10 @@ export default function SpreadsheetCalculator() {
                             Save {formatCurrency(config.savings)}
                           </Badge>
                         )}
+                        <div className="text-xs text-muted-foreground">
+                          {config.quantity > 1 &&
+                            `${config.quantity}x instances`}
+                        </div>
                       </div>
                     </td>
 

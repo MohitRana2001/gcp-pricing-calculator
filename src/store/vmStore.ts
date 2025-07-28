@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { VmConfig, calculateMockCost, getMachineTypeSpecs, MACHINE_TYPES } from '@/lib/calculator'
+import { VmConfig, calculateMockCost, getMachineTypeSpecs, MACHINE_TYPES, seriesSupportsGpu, getAvailableGpuTypes } from '@/lib/calculator'
 
 interface VmStore {
   configurations: VmConfig[]
@@ -21,9 +21,10 @@ interface VmStore {
   // Preset configurations
   addPresetConfiguration: (presetType: 'web-server' | 'database-server' | 'compute-intensive') => void
   
-  // CSV operations
+  // CSV operations with AI intelligence
   exportToCSV: () => void
-  importFromCSV: (csvData: string) => void
+  importFromCSV: (csvData: string) => Promise<void>
+  intelligentCSVMapping: (csvData: string) => Promise<any[]>
   
   // Statistics
   getTotalConfigurations: () => number
@@ -44,8 +45,12 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     isCustom: false,
     vcpus: 2,
     memory: 8,
+    operatingSystem: 'Linux',
+    runningHours: 730, // Full month (24 * 30.42 average days)
+    quantity: 1,
     diskType: 'Balanced',
     diskSize: 50,
+    hasGpu: false,
     discountModel: 'On-Demand',
     ...overrides
   }
@@ -77,6 +82,114 @@ function parseCSV(csvData: string): any[] {
     })
     return obj
   })
+}
+
+// AI-powered intelligent CSV field mapping
+async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<string, string>> {
+  // This simulates an AI agent that maps CSV headers to our field names
+  // In a real implementation, this would call an LLM API like Gemini
+  
+  const fieldMappings: Record<string, string[]> = {
+    region: ['region', 'location', 'zone', 'area', 'datacenter', 'dc'],
+    machineSeries: ['series', 'machine_series', 'vm_series', 'instance_series', 'family', 'type_family'],
+    machineType: ['machine_type', 'instance_type', 'vm_type', 'type', 'size', 'flavor'],
+    operatingSystem: ['os', 'operating_system', 'system', 'platform', 'image'],
+    vcpus: ['vcpu', 'vcpus', 'cpu', 'cpus', 'cores', 'processors'],
+    memory: ['memory', 'ram', 'mem', 'memory_gb', 'ram_gb'],
+    runningHours: ['hours', 'running_hours', 'runtime', 'uptime', 'usage_hours'],
+    quantity: ['quantity', 'count', 'instances', 'num_instances', 'amount'],
+    diskType: ['disk_type', 'storage_type', 'disk', 'storage'],
+    diskSize: ['disk_size', 'storage_size', 'disk_gb', 'storage_gb'],
+    hasGpu: ['gpu', 'has_gpu', 'gpu_enabled', 'accelerator'],
+    gpuType: ['gpu_type', 'accelerator_type', 'gpu_model'],
+    gpuCount: ['gpu_count', 'num_gpus', 'accelerator_count'],
+    discountModel: ['discount', 'pricing_model', 'billing_model', 'commitment']
+  }
+  
+  const mapping: Record<string, string> = {}
+  
+  // Simple fuzzy matching algorithm (in real implementation, use LLM)
+  for (const [targetField, aliases] of Object.entries(fieldMappings)) {
+    for (const header of csvHeaders) {
+      const normalizedHeader = header.toLowerCase().replace(/[\s_-]/g, '')
+      
+      for (const alias of aliases) {
+        const normalizedAlias = alias.toLowerCase().replace(/[\s_-]/g, '')
+        
+        if (normalizedHeader.includes(normalizedAlias) || normalizedAlias.includes(normalizedHeader)) {
+          mapping[targetField] = header
+          break
+        }
+      }
+      
+      if (mapping[targetField]) break
+    }
+  }
+  
+  return mapping
+}
+
+// Smart data transformation using AI-like logic
+function transformValue(value: string, targetField: string): any {
+  if (!value || value === '') return null
+  
+  switch (targetField) {
+    case 'vcpus':
+    case 'memory':
+    case 'runningHours':
+    case 'quantity':
+    case 'diskSize':
+    case 'gpuCount':
+      return parseInt(value) || (targetField === 'quantity' ? 1 : 0)
+    
+    case 'hasGpu':
+      return ['true', 'yes', '1', 'enabled'].includes(value.toLowerCase())
+    
+    case 'operatingSystem':
+      // Smart OS mapping
+      const osValue = value.toLowerCase()
+      if (osValue.includes('windows')) return 'Windows Server'
+      if (osValue.includes('ubuntu')) return 'Ubuntu Pro'
+      if (osValue.includes('rhel') || osValue.includes('red hat')) return 'RHEL'
+      if (osValue.includes('suse') || osValue.includes('sles')) return 'SLES'
+      return 'Linux'
+    
+    case 'region':
+      // Smart region mapping
+      const regionValue = value.toLowerCase().replace(/[\s_-]/g, '')
+      if (regionValue.includes('uscentral') || regionValue.includes('central')) return 'us-central1'
+      if (regionValue.includes('useast')) return 'us-east1'
+      if (regionValue.includes('uswest')) return 'us-west1'
+      if (regionValue.includes('europe') || regionValue.includes('eu')) return 'europe-west1'
+      if (regionValue.includes('asia')) return 'asia-southeast1'
+      return 'us-central1'
+    
+    case 'machineSeries':
+      // Smart series mapping
+      const seriesValue = value.toUpperCase()
+      if (['E2', 'N2', 'N2D', 'C3', 'M3', 'N1', 'A2', 'G2'].includes(seriesValue)) return seriesValue
+      if (value.toLowerCase().includes('general')) return 'N2'
+      if (value.toLowerCase().includes('compute')) return 'C3'
+      if (value.toLowerCase().includes('memory')) return 'M3'
+      if (value.toLowerCase().includes('gpu')) return 'A2'
+      return 'E2'
+    
+    case 'diskType':
+      const diskValue = value.toLowerCase()
+      if (diskValue.includes('ssd')) return 'SSD'
+      if (diskValue.includes('balanced')) return 'Balanced'
+      return 'Standard'
+    
+    case 'discountModel':
+      const discountValue = value.toLowerCase()
+      if (discountValue.includes('spot')) return 'Spot VM'
+      if (discountValue.includes('1') && discountValue.includes('year')) return '1-Year CUD'
+      if (discountValue.includes('3') && discountValue.includes('year')) return '3-Year CUD'
+      return 'On-Demand'
+    
+    default:
+      return value
+  }
 }
 
 export const useVmStore = create<VmStore>((set, get) => ({
@@ -140,6 +253,31 @@ export const useVmStore = create<VmStore>((set, get) => ({
               updatedConfig.vcpus = specs.vcpus
               updatedConfig.memory = specs.memory
             }
+          }
+          
+          // Handle GPU support changes
+          if (updates.machineSeries && updates.machineSeries !== config.machineSeries) {
+            const supportsGpu = seriesSupportsGpu(updates.machineSeries)
+            if (!supportsGpu) {
+              updatedConfig.hasGpu = false
+              updatedConfig.gpuType = undefined
+              updatedConfig.gpuCount = undefined
+            }
+          }
+          
+          // If enabling GPU, set defaults
+          if (updates.hasGpu === true && !config.hasGpu) {
+            const availableGpuTypes = getAvailableGpuTypes(updatedConfig.machineSeries)
+            if (availableGpuTypes.length > 0) {
+              updatedConfig.gpuType = availableGpuTypes[0]
+              updatedConfig.gpuCount = 1
+            }
+          }
+          
+          // If disabling GPU, clear GPU fields
+          if (updates.hasGpu === false) {
+            updatedConfig.gpuType = undefined
+            updatedConfig.gpuCount = undefined
           }
           
           // If switching to custom, don't auto-update specs
@@ -220,8 +358,12 @@ export const useVmStore = create<VmStore>((set, get) => ({
           machineType: 'e2-medium',
           vcpus: 1,
           memory: 4,
+          operatingSystem: 'Linux',
+          runningHours: 730,
+          quantity: 2,
           diskType: 'Balanced',
           diskSize: 50,
+          hasGpu: false,
           discountModel: 'On-Demand',
         })
         break
@@ -231,19 +373,29 @@ export const useVmStore = create<VmStore>((set, get) => ({
           machineType: 'n2-standard-4',
           vcpus: 4,
           memory: 16,
+          operatingSystem: 'Linux',
+          runningHours: 730,
+          quantity: 1,
           diskType: 'SSD',
           diskSize: 200,
+          hasGpu: false,
           discountModel: '1-Year CUD',
         })
         break
       case 'compute-intensive':
         presetConfig = createDefaultConfiguration({
-          machineSeries: 'C3',
-          machineType: 'c3-standard-8',
-          vcpus: 8,
-          memory: 32,
+          machineSeries: 'A2',
+          machineType: 'a2-highgpu-1g',
+          vcpus: 12,
+          memory: 85,
+          operatingSystem: 'Linux',
+          runningHours: 200,
+          quantity: 1,
           diskType: 'Balanced',
           diskSize: 100,
+          hasGpu: true,
+          gpuType: 'nvidia-tesla-a100',
+          gpuCount: 1,
           discountModel: 'Spot VM',
         })
         break
@@ -266,8 +418,14 @@ export const useVmStore = create<VmStore>((set, get) => ({
       'Machine Series',
       'Machine Type',
       'Is Custom',
+      'Operating System',
       'vCPUs',
       'Memory (GB)',
+      'Running Hours',
+      'Quantity',
+      'Has GPU',
+      'GPU Type',
+      'GPU Count',
       'Disk Type',
       'Disk Size (GB)',
       'Discount Model',
@@ -283,8 +441,14 @@ export const useVmStore = create<VmStore>((set, get) => ({
         config.machineSeries,
         config.machineType,
         config.isCustom,
+        config.operatingSystem,
         config.vcpus,
         config.memory,
+        config.runningHours,
+        config.quantity,
+        config.hasGpu,
+        config.gpuType || '',
+        config.gpuCount || '',
         config.diskType,
         config.diskSize,
         config.discountModel,
@@ -298,27 +462,46 @@ export const useVmStore = create<VmStore>((set, get) => ({
     downloadCSV(csvContent, `gcp-pricing-${timestamp}.csv`)
   },
 
-  importFromCSV: (csvData) => {
-    try {
-      const parsedData = parseCSV(csvData)
-      const configurations = parsedData.map(row => ({
-        region: row['Region'] || 'us-central1',
-        machineSeries: row['Machine Series'] || 'E2',
-        machineType: row['Machine Type'] || 'e2-standard-2',
-        isCustom: row['Is Custom'] === 'true' || row['Is Custom'] === true,
-        vcpus: parseInt(row['vCPUs']) || 2,
-        memory: parseInt(row['Memory (GB)']) || 8,
-        diskType: row['Disk Type'] || 'Balanced',
-        diskSize: parseInt(row['Disk Size (GB)']) || 50,
-        discountModel: row['Discount Model'] || 'On-Demand',
-      }))
+  intelligentCSVMapping: async (csvData: string) => {
+    const parsedData = parseCSV(csvData)
+    if (parsedData.length === 0) return []
+    
+    const headers = Object.keys(parsedData[0])
+    const fieldMapping = await intelligentFieldMapping(headers)
+    
+    return parsedData.map(row => {
+      const mappedConfig: any = {}
+      
+      // Apply intelligent field mapping
+      for (const [targetField, sourceHeader] of Object.entries(fieldMapping)) {
+        if (row[sourceHeader]) {
+          const transformedValue = transformValue(row[sourceHeader], targetField)
+          if (transformedValue !== null) {
+            mappedConfig[targetField] = transformedValue
+          }
+        }
+      }
+      
+      // Fill in defaults for missing fields
+      const defaultConfig = createDefaultConfiguration()
+      const finalConfig = { ...defaultConfig, ...mappedConfig }
+      
+      return finalConfig
+    })
+  },
 
+  importFromCSV: async (csvData: string) => {
+    try {
+      const mappedConfigurations = await get().intelligentCSVMapping(csvData)
+      
       // Add all configurations
-      configurations.forEach(config => get().addConfiguration(config))
+      mappedConfigurations.forEach(config => get().addConfiguration(config))
+      
+      alert(`Successfully imported ${mappedConfigurations.length} configurations with intelligent field mapping!`)
       
     } catch (error) {
       console.error('Error importing CSV:', error)
-      alert('Error importing CSV file. Please check the format.')
+      alert('Error importing CSV file. Please check the format and try again.')
     }
   },
 

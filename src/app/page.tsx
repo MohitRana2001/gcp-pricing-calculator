@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Cloud } from "lucide-react";
+import Image from "next/image";
 import SpreadsheetCalculator from "@/components/SpreadsheetCalculator";
 import QuickActions from "@/components/QuickActions";
 
@@ -11,16 +11,23 @@ export default function HomePage() {
       {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
-              <Cloud className="h-6 w-6 text-primary-foreground" />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center justify-center w-16 h-16 rounded-lg p-2">
+              <Image
+                src="/images/icons8-google-cloud.svg"
+                alt="Google Cloud Platform"
+                width={56}
+                height={56}
+                className="object-contain"
+              />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">
                 GCP Pricing Calculator
               </h1>
               <p className="text-sm text-muted-foreground">
-                Excel-like interface for Compute Engine cost analysis
+                Professional spreadsheet interface for Google Cloud Compute
+                Engine cost analysis
               </p>
             </div>
           </div>
