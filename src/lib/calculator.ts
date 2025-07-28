@@ -1,6 +1,5 @@
 export interface VmConfig {
   id: string
-  name: string
   region: string
   machineType: string
   machineSeries: string

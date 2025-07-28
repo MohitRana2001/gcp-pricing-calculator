@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import {
   Server,
   Database,
@@ -15,6 +15,7 @@ import {
   DollarSign,
   Layers,
   TrendingDown,
+  Zap,
 } from "lucide-react";
 import { useVmStore } from "@/store/vmStore";
 import { Button } from "@/components/ui/button";
@@ -39,8 +40,11 @@ export default function QuickActions() {
     getAverageCost,
     getTotalSavings,
     getTotalMonthlyCost,
+    exportToCSV,
+    importFromCSV,
   } = useVmStore();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedIdsArray = Array.from(selectedIds);
   const hasSelection = selectedIds.size > 0;
 
@@ -50,6 +54,22 @@ export default function QuickActions() {
       currency: "USD",
       minimumFractionDigits: 2,
     }).format(amount);
+  };
+
+  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const csvData = e.target?.result as string;
+        importFromCSV(csvData);
+      };
+      reader.readAsText(file);
+    }
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const presets = [
@@ -241,20 +261,85 @@ export default function QuickActions() {
           <CardDescription>Bulk data management capabilities</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button variant="outline" className="w-full justify-start" disabled>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleImportCSV}
+            style={{ display: "none" }}
+          />
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => fileInputRef.current?.click()}
+          >
             <Upload className="h-4 w-4 mr-2" />
             Import CSV
-            <Badge variant="secondary" className="ml-auto text-xs">
-              Coming Soon
-            </Badge>
           </Button>
 
-          <Button variant="outline" className="w-full justify-start" disabled>
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={exportToCSV}
+          >
             <Download className="h-4 w-4 mr-2" />
             Export CSV
-            <Badge variant="secondary" className="ml-auto text-xs">
-              Coming Soon
-            </Badge>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Multi-Cloud Comparison */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Zap className="h-5 w-5" />
+            Multi-Cloud Comparison
+          </CardTitle>
+          <CardDescription>
+            Compare pricing across cloud providers
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            className="w-full h-auto p-4 justify-start text-left opacity-60 cursor-not-allowed"
+            disabled
+          >
+            <div className="flex items-start gap-3 w-full">
+              <div className="flex items-center justify-center w-8 h-8 bg-orange-100 rounded-lg">
+                <span className="text-orange-600 font-bold text-sm">AWS</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm">Amazon Web Services</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  EC2 pricing comparison
+                </div>
+                <Badge variant="secondary" className="mt-1 text-xs">
+                  Coming Soon
+                </Badge>
+              </div>
+            </div>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full h-auto p-4 justify-start text-left opacity-60 cursor-not-allowed"
+            disabled
+          >
+            <div className="flex items-start gap-3 w-full">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-lg">
+                <span className="text-blue-600 font-bold text-xs">Azure</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm">Microsoft Azure</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Virtual Machines pricing
+                </div>
+                <Badge variant="secondary" className="mt-1 text-xs">
+                  Coming Soon
+                </Badge>
+              </div>
+            </div>
           </Button>
         </CardContent>
       </Card>

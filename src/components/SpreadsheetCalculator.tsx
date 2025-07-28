@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Trash2, Plus } from "lucide-react";
+import { Copy, Trash2, Plus, Settings } from "lucide-react";
 import { useVmStore } from "@/store/vmStore";
 import {
   REGIONS,
@@ -39,10 +39,13 @@ export default function SpreadsheetCalculator() {
     toggleSelection,
     selectAll,
     clearSelection,
+    exportToCSV,
+    importFromCSV,
   } = useVmStore();
 
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAllSelected =
     configurations.length > 0 && selectedIds.size === configurations.length;
@@ -51,7 +54,6 @@ export default function SpreadsheetCalculator() {
 
   const handleAddConfiguration = () => {
     addConfiguration({
-      name: "New Configuration",
       region: "us-central1",
       machineSeries: "E2",
       machineType: "e2-standard-2",
@@ -75,7 +77,7 @@ export default function SpreadsheetCalculator() {
   const handleInputChange = (
     configId: string,
     field: string,
-    value: string | number
+    value: string | number | boolean
   ) => {
     updateConfiguration(configId, { [field]: value });
   };
@@ -85,6 +87,22 @@ export default function SpreadsheetCalculator() {
       clearSelection();
     } else {
       selectAll();
+    }
+  };
+
+  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const csvData = e.target?.result as string;
+        importFromCSV(csvData);
+      };
+      reader.readAsText(file);
+    }
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -105,13 +123,36 @@ export default function SpreadsheetCalculator() {
             <Badge variant="secondary">{selectedIds.size} selected</Badge>
           )}
         </div>
-        <Button
-          onClick={handleAddConfiguration}
-          className="flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Add Configuration
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleImportCSV}
+            style={{ display: "none" }}
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2"
+          >
+            Import CSV
+          </Button>
+          <Button
+            variant="outline"
+            onClick={exportToCSV}
+            className="flex items-center gap-2"
+          >
+            Export CSV
+          </Button>
+          <Button
+            onClick={handleAddConfiguration}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add Configuration
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -130,34 +171,34 @@ export default function SpreadsheetCalculator() {
                     }
                   />
                 </th>
-                <th className="min-w-[150px] p-3 text-left font-semibold">
-                  Name
-                </th>
-                <th className="min-w-[120px] p-3 text-left font-semibold">
+                <th className="min-w-[140px] p-3 text-left font-semibold">
                   Region
                 </th>
-                <th className="min-w-[100px] p-3 text-left font-semibold">
-                  Series
+                <th className="min-w-[130px] p-3 text-left font-semibold">
+                  Machine Series
                 </th>
-                <th className="min-w-[140px] p-3 text-left font-semibold">
+                <th className="min-w-[160px] p-3 text-left font-semibold">
                   Machine Type
                 </th>
                 <th className="min-w-[80px] p-3 text-left font-semibold">
+                  Custom
+                </th>
+                <th className="min-w-[100px] p-3 text-left font-semibold">
                   vCPU
                 </th>
-                <th className="min-w-[100px] p-3 text-left font-semibold">
+                <th className="min-w-[120px] p-3 text-left font-semibold">
                   Memory (GB)
                 </th>
-                <th className="min-w-[100px] p-3 text-left font-semibold">
+                <th className="min-w-[120px] p-3 text-left font-semibold">
                   Disk Type
                 </th>
-                <th className="min-w-[100px] p-3 text-left font-semibold">
+                <th className="min-w-[130px] p-3 text-left font-semibold">
                   Disk Size (GB)
                 </th>
-                <th className="min-w-[120px] p-3 text-left font-semibold">
-                  Discount
+                <th className="min-w-[140px] p-3 text-left font-semibold">
+                  Discount Model
                 </th>
-                <th className="min-w-[120px] p-3 text-left font-semibold">
+                <th className="min-w-[140px] p-3 text-left font-semibold">
                   Monthly Cost
                 </th>
                 <th className="w-24 p-3 text-left font-semibold">Actions</th>
@@ -184,32 +225,6 @@ export default function SpreadsheetCalculator() {
                         checked={selectedIds.has(config.id)}
                         onCheckedChange={() => toggleSelection(config.id)}
                       />
-                    </td>
-
-                    {/* Name */}
-                    <td className="p-3">
-                      {editingCell?.configId === config.id &&
-                      editingCell?.field === "name" ? (
-                        <Input
-                          value={config.name}
-                          onChange={(e) =>
-                            handleInputChange(config.id, "name", e.target.value)
-                          }
-                          onBlur={handleCellBlur}
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && handleCellBlur()
-                          }
-                          className="h-8 text-sm"
-                          autoFocus
-                        />
-                      ) : (
-                        <button
-                          onClick={() => handleCellClick(config.id, "name")}
-                          className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
-                        >
-                          {config.name}
-                        </button>
-                      )}
                     </td>
 
                     {/* Region */}
@@ -240,6 +255,7 @@ export default function SpreadsheetCalculator() {
                         onValueChange={(value) =>
                           handleInputChange(config.id, "machineSeries", value)
                         }
+                        disabled={config.isCustom}
                       >
                         <SelectTrigger className="h-8 text-sm">
                           <SelectValue />
@@ -256,25 +272,42 @@ export default function SpreadsheetCalculator() {
 
                     {/* Machine Type */}
                     <td className="p-3">
-                      <Select
-                        value={config.machineType}
-                        onValueChange={(value) =>
-                          handleInputChange(config.id, "machineType", value)
+                      {config.isCustom ? (
+                        <div className="flex items-center gap-2 h-8 px-3 py-2 text-sm bg-muted rounded-md">
+                          <Settings className="h-4 w-4" />
+                          Custom
+                        </div>
+                      ) : (
+                        <Select
+                          value={config.machineType}
+                          onValueChange={(value) =>
+                            handleInputChange(config.id, "machineType", value)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(MACHINE_TYPES[config.machineSeries] || []).map(
+                              (type) => (
+                                <SelectItem key={type} value={type}>
+                                  {type}
+                                </SelectItem>
+                              )
+                            )}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </td>
+
+                    {/* Custom Toggle */}
+                    <td className="p-3">
+                      <Checkbox
+                        checked={config.isCustom}
+                        onCheckedChange={(checked) =>
+                          handleInputChange(config.id, "isCustom", checked)
                         }
-                      >
-                        <SelectTrigger className="h-8 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(MACHINE_TYPES[config.machineSeries] || []).map(
-                            (type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectContent>
-                      </Select>
+                      />
                     </td>
 
                     {/* vCPU */}
@@ -304,6 +337,7 @@ export default function SpreadsheetCalculator() {
                         <button
                           onClick={() => handleCellClick(config.id, "vcpus")}
                           className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                          disabled={!config.isCustom}
                         >
                           {config.vcpus}
                         </button>
@@ -337,6 +371,7 @@ export default function SpreadsheetCalculator() {
                         <button
                           onClick={() => handleCellClick(config.id, "memory")}
                           className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                          disabled={!config.isCustom}
                         >
                           {config.memory}
                         </button>

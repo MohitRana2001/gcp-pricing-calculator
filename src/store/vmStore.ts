@@ -21,6 +21,10 @@ interface VmStore {
   // Preset configurations
   addPresetConfiguration: (presetType: 'web-server' | 'database-server' | 'compute-intensive') => void
   
+  // CSV operations
+  exportToCSV: () => void
+  importFromCSV: (csvData: string) => void
+  
   // Statistics
   getTotalConfigurations: () => number
   getAverageCost: () => number
@@ -34,7 +38,6 @@ function generateId(): string {
 
 function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'> {
   const defaults = {
-    name: 'New Configuration',
     region: 'us-central1',
     machineSeries: 'E2',
     machineType: 'e2-standard-2',
@@ -48,6 +51,32 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
   }
   
   return defaults
+}
+
+function downloadCSV(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  link.setAttribute('download', filename)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+function parseCSV(csvData: string): any[] {
+  const lines = csvData.trim().split('\n')
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+  
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
+    const obj: any = {}
+    headers.forEach((header, index) => {
+      obj[header] = values[index] || ''
+    })
+    return obj
+  })
 }
 
 export const useVmStore = create<VmStore>((set, get) => ({
@@ -78,14 +107,14 @@ export const useVmStore = create<VmStore>((set, get) => ({
   removeConfiguration: (id) => {
     set((state) => ({
       configurations: state.configurations.filter((config) => config.id !== id),
-      selectedIds: new Set([...state.selectedIds].filter((selectedId) => selectedId !== id)),
+      selectedIds: new Set(Array.from(state.selectedIds).filter((selectedId) => selectedId !== id)),
     }))
   },
 
   removeMultipleConfigurations: (ids) => {
     set((state) => ({
       configurations: state.configurations.filter((config) => !ids.includes(config.id)),
-      selectedIds: new Set([...state.selectedIds].filter((selectedId) => !ids.includes(selectedId))),
+      selectedIds: new Set(Array.from(state.selectedIds).filter((selectedId) => !ids.includes(selectedId))),
     }))
   },
 
@@ -96,15 +125,31 @@ export const useVmStore = create<VmStore>((set, get) => ({
           const updatedConfig = { ...config, ...updates }
           
           // Auto-update machine type specs if machine type changed
-          if (updates.machineType && updates.machineType !== config.machineType) {
+          if (updates.machineType && updates.machineType !== config.machineType && !updatedConfig.isCustom) {
             const specs = getMachineTypeSpecs(updates.machineType)
             updatedConfig.vcpus = specs.vcpus
             updatedConfig.memory = specs.memory
           }
           
           // Auto-update machine types if series changed
-          if (updates.machineSeries && updates.machineSeries !== config.machineSeries) {
+          if (updates.machineSeries && updates.machineSeries !== config.machineSeries && !updatedConfig.isCustom) {
             const availableTypes = MACHINE_TYPES[updates.machineSeries] || []
+            if (availableTypes.length > 0) {
+              updatedConfig.machineType = availableTypes[0]
+              const specs = getMachineTypeSpecs(availableTypes[0])
+              updatedConfig.vcpus = specs.vcpus
+              updatedConfig.memory = specs.memory
+            }
+          }
+          
+          // If switching to custom, don't auto-update specs
+          if (updates.isCustom === true) {
+            updatedConfig.machineType = 'custom'
+          }
+          
+          // If switching from custom to predefined, reset to series default
+          if (updates.isCustom === false && config.isCustom === true) {
+            const availableTypes = MACHINE_TYPES[updatedConfig.machineSeries] || []
             if (availableTypes.length > 0) {
               updatedConfig.machineType = availableTypes[0]
               const specs = getMachineTypeSpecs(availableTypes[0])
@@ -129,10 +174,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
   duplicateConfiguration: (id) => {
     const config = get().configurations.find((c) => c.id === id)
     if (config) {
-      const newConfig = {
-        ...config,
-        name: `${config.name} (Copy)`,
-      }
+      const newConfig = { ...config }
       delete (newConfig as any).id
       delete (newConfig as any).estimatedCost
       delete (newConfig as any).onDemandCost
@@ -174,7 +216,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
     switch (presetType) {
       case 'web-server':
         presetConfig = createDefaultConfiguration({
-          name: 'Web Server',
           machineSeries: 'E2',
           machineType: 'e2-medium',
           vcpus: 1,
@@ -186,7 +227,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
         break
       case 'database-server':
         presetConfig = createDefaultConfiguration({
-          name: 'Database Server',
           machineSeries: 'N2',
           machineType: 'n2-standard-4',
           vcpus: 4,
@@ -198,7 +238,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
         break
       case 'compute-intensive':
         presetConfig = createDefaultConfiguration({
-          name: 'Compute Intensive',
           machineSeries: 'C3',
           machineType: 'c3-standard-8',
           vcpus: 8,
@@ -213,6 +252,74 @@ export const useVmStore = create<VmStore>((set, get) => ({
     }
     
     get().addConfiguration(presetConfig)
+  },
+
+  exportToCSV: () => {
+    const configs = get().configurations
+    if (configs.length === 0) {
+      alert('No configurations to export')
+      return
+    }
+
+    const headers = [
+      'Region',
+      'Machine Series',
+      'Machine Type',
+      'Is Custom',
+      'vCPUs',
+      'Memory (GB)',
+      'Disk Type',
+      'Disk Size (GB)',
+      'Discount Model',
+      'Estimated Cost ($)',
+      'On-Demand Cost ($)',
+      'Savings ($)'
+    ]
+
+    const csvContent = [
+      headers.join(','),
+      ...configs.map(config => [
+        config.region,
+        config.machineSeries,
+        config.machineType,
+        config.isCustom,
+        config.vcpus,
+        config.memory,
+        config.diskType,
+        config.diskSize,
+        config.discountModel,
+        config.estimatedCost,
+        config.onDemandCost,
+        config.savings
+      ].join(','))
+    ].join('\n')
+
+    const timestamp = new Date().toISOString().split('T')[0]
+    downloadCSV(csvContent, `gcp-pricing-${timestamp}.csv`)
+  },
+
+  importFromCSV: (csvData) => {
+    try {
+      const parsedData = parseCSV(csvData)
+      const configurations = parsedData.map(row => ({
+        region: row['Region'] || 'us-central1',
+        machineSeries: row['Machine Series'] || 'E2',
+        machineType: row['Machine Type'] || 'e2-standard-2',
+        isCustom: row['Is Custom'] === 'true' || row['Is Custom'] === true,
+        vcpus: parseInt(row['vCPUs']) || 2,
+        memory: parseInt(row['Memory (GB)']) || 8,
+        diskType: row['Disk Type'] || 'Balanced',
+        diskSize: parseInt(row['Disk Size (GB)']) || 50,
+        discountModel: row['Discount Model'] || 'On-Demand',
+      }))
+
+      // Add all configurations
+      configurations.forEach(config => get().addConfiguration(config))
+      
+    } catch (error) {
+      console.error('Error importing CSV:', error)
+      alert('Error importing CSV file. Please check the format.')
+    }
   },
 
   getTotalConfigurations: () => get().configurations.length,
