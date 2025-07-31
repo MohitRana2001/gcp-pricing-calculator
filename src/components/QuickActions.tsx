@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import Image from "next/image";
 import {
   Server,
@@ -17,6 +17,8 @@ import {
   Layers,
   TrendingDown,
   Zap,
+  Globe,
+  Cog,
 } from "lucide-react";
 import { useVmStore } from "@/store/vmStore";
 import { Button } from "@/components/ui/button";
@@ -28,24 +30,34 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { REGIONS, MACHINE_SERIES } from "@/lib/calculator";
 
 export default function QuickActions() {
   const {
-    configurations,
     selectedIds,
     addPresetConfiguration,
     removeMultipleConfigurations,
     duplicateMultipleConfigurations,
+    updateMultipleConfigurations,
     clearSelection,
     getTotalConfigurations,
     getAverageCost,
     getTotalSavings,
     getTotalMonthlyCost,
-    exportToCSV,
     importFromCSV,
   } = useVmStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bulkRegion, setBulkRegion] = useState("");
+  const [bulkSeries, setBulkSeries] = useState("");
+
   const selectedIdsArray = Array.from(selectedIds);
   const hasSelection = selectedIds.size > 0;
 
@@ -55,6 +67,20 @@ export default function QuickActions() {
       currency: "USD",
       minimumFractionDigits: 2,
     }).format(amount);
+  };
+
+  const handleApplyBulkChanges = () => {
+    const updates: { region?: string; machineSeries?: string } = {};
+    if (bulkRegion) {
+      updates.region = bulkRegion;
+    }
+    if (bulkSeries) {
+      updates.machineSeries = bulkSeries;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updateMultipleConfigurations(selectedIdsArray, updates);
+    }
   };
 
   const handleImportCSV = async (
@@ -69,7 +95,6 @@ export default function QuickActions() {
       };
       reader.readAsText(file);
     }
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -104,7 +129,6 @@ export default function QuickActions() {
 
   return (
     <div className="w-80 space-y-6">
-      {/* Quick Presets */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -116,34 +140,30 @@ export default function QuickActions() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {presets.map((preset) => {
-            const Icon = preset.icon;
-            return (
-              <Button
-                key={preset.id}
-                variant="outline"
-                className="w-full h-auto p-4 justify-start text-left"
-                onClick={preset.onClick}
-              >
-                <div className="flex items-start gap-3 w-full">
-                  <Icon className="h-5 w-5 mt-0.5 text-primary" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm">{preset.name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {preset.description}
-                    </div>
-                    <Badge variant="secondary" className="mt-1 text-xs">
-                      {preset.estimatedCost}
-                    </Badge>
+          {presets.map((preset) => (
+            <Button
+              key={preset.id}
+              variant="outline"
+              className="w-full h-auto p-4 justify-start text-left"
+              onClick={preset.onClick}
+            >
+              <div className="flex items-start gap-3 w-full">
+                <preset.icon className="h-5 w-5 mt-0.5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm">{preset.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {preset.description}
                   </div>
+                  <Badge variant="secondary" className="mt-1 text-xs">
+                    {preset.estimatedCost}
+                  </Badge>
                 </div>
-              </Button>
-            );
-          })}
+              </div>
+            </Button>
+          ))}
         </CardContent>
       </Card>
 
-      {/* Bulk Actions */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -156,10 +176,56 @@ export default function QuickActions() {
         </CardHeader>
         <CardContent className="space-y-3">
           {hasSelection && (
-            <div className="mb-3 p-2 bg-primary/10 rounded-md">
-              <div className="text-sm font-medium text-primary">
+            <div className="mb-3 p-3 bg-primary/10 rounded-md border border-primary/20">
+              <div className="text-sm font-medium text-primary mb-3">
                 {selectedIds.size} configuration
                 {selectedIds.size > 1 ? "s" : ""} selected
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium flex items-center gap-1 mb-1">
+                    <Globe className="h-3 w-3" />
+                    Region
+                  </label>
+                  <Select value={bulkRegion} onValueChange={setBulkRegion}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Apply new region..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REGIONS.map((region) => (
+                        <SelectItem key={region} value={region}>
+                          {region}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium flex items-center gap-1 mb-1">
+                    <Cog className="h-3 w-3" />
+                    Series
+                  </label>
+                  <Select value={bulkSeries} onValueChange={setBulkSeries}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Apply new series..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MACHINE_SERIES.map((series) => (
+                        <SelectItem key={series} value={series}>
+                          {series}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  onClick={handleApplyBulkChanges}
+                  disabled={!bulkRegion && !bulkSeries}
+                >
+                  Apply Changes
+                </Button>
               </div>
             </div>
           )}
@@ -196,7 +262,6 @@ export default function QuickActions() {
         </CardContent>
       </Card>
 
-      {/* Statistics */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -254,44 +319,6 @@ export default function QuickActions() {
         </CardContent>
       </Card>
 
-      {/* Import/Export */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Upload className="h-5 w-5" />
-            Import/Export
-          </CardTitle>
-          <CardDescription>Bulk data management capabilities</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleImportCSV}
-            style={{ display: "none" }}
-          />
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import CSV
-          </Button>
-
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            onClick={exportToCSV}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Multi-Cloud Comparison */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">

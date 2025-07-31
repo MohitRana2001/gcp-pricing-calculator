@@ -58,7 +58,7 @@ export default function SpreadsheetCalculator() {
   const handleAddConfiguration = () => {
     addConfiguration({
       region: "us-central1",
-      machineSeries: "E2",
+      machineSeries: "e2",
       machineType: "e2-standard-2",
       isCustom: false,
       vcpus: 2,
@@ -320,7 +320,7 @@ export default function SpreadsheetCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {(MACHINE_TYPES[config.machineSeries] || []).map(
+                            {MACHINE_TYPES.filter(type => type.startsWith(config.machineSeries.toLowerCase())).map(
                               (type) => (
                                 <SelectItem key={type} value={type}>
                                   {type}

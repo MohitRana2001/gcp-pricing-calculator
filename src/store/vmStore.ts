@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { VmConfig, calculateMockCost, getMachineTypeSpecs, MACHINE_TYPES, seriesSupportsGpu, getAvailableGpuTypes } from '@/lib/calculator'
+import { VmConfig, calculateRealCost, getMachineTypeSpecs, seriesSupportsGpu, getAvailableGpuTypes, MACHINE_SERIES, MACHINE_TYPES, REGIONS } from '@/lib/calculator'
 
 interface VmStore {
   configurations: VmConfig[]
@@ -10,6 +10,7 @@ interface VmStore {
   removeConfiguration: (id: string) => void
   removeMultipleConfigurations: (ids: string[]) => void
   updateConfiguration: (id: string, updates: Partial<VmConfig>) => void
+  updateMultipleConfigurations: (ids: string[], updates: Partial<VmConfig>) => void;
   duplicateConfiguration: (id: string) => void
   duplicateMultipleConfigurations: (ids: string[]) => void
   
@@ -40,7 +41,7 @@ function generateId(): string {
 function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'> {
   const defaults = {
     region: 'us-central1',
-    machineSeries: 'E2',
+    machineSeries: 'e2',
     machineType: 'e2-standard-2',
     isCustom: false,
     vcpus: 2,
@@ -167,12 +168,12 @@ function transformValue(value: string, targetField: string): any {
     case 'machineSeries':
       // Smart series mapping
       const seriesValue = value.toUpperCase()
-      if (['E2', 'N2', 'N2D', 'C3', 'M3', 'N1', 'A2', 'G2'].includes(seriesValue)) return seriesValue
-      if (value.toLowerCase().includes('general')) return 'N2'
-      if (value.toLowerCase().includes('compute')) return 'C3'
-      if (value.toLowerCase().includes('memory')) return 'M3'
-      if (value.toLowerCase().includes('gpu')) return 'A2'
-      return 'E2'
+      if (MACHINE_SERIES.includes(seriesValue)) return seriesValue
+      if (value.toLowerCase().includes('general')) return 'n2'
+      if (value.toLowerCase().includes('compute')) return 'c3'
+      if (value.toLowerCase().includes('memory')) return 'm3'
+      if (value.toLowerCase().includes('gpu')) return 'a2'
+      return 'e2'
     
     case 'diskType':
       const diskValue = value.toLowerCase()
@@ -192,6 +193,69 @@ function transformValue(value: string, targetField: string): any {
   }
 }
 
+const updateAndRecalculateConfig = (config: VmConfig, updates: Partial<VmConfig>): VmConfig => {
+  const updatedConfig = { ...config, ...updates };
+
+  if (updates.machineType && updates.machineType !== config.machineType && !updatedConfig.isCustom) {
+    const specs = getMachineTypeSpecs(updates.machineType);
+    updatedConfig.vcpus = specs.vcpus;
+    updatedConfig.memory = specs.memory;
+  }
+
+  if (updates.machineSeries && updates.machineSeries !== config.machineSeries && !updatedConfig.isCustom) {
+    const availableTypes = MACHINE_TYPES.filter((m) => m.startsWith(updates.machineSeries!.toLowerCase()));
+    if (availableTypes.length > 0) {
+      updatedConfig.machineType = availableTypes[0];
+      const specs = getMachineTypeSpecs(availableTypes[0]);
+      updatedConfig.vcpus = specs.vcpus;
+      updatedConfig.memory = specs.memory;
+    }
+  }
+
+  if (updates.machineSeries && updates.machineSeries !== config.machineSeries) {
+    const supportsGpu = seriesSupportsGpu(updates.machineSeries);
+    if (!supportsGpu) {
+      updatedConfig.hasGpu = false;
+      updatedConfig.gpuType = undefined;
+      updatedConfig.gpuCount = undefined;
+    }
+  }
+
+  if (updates.hasGpu === true && !config.hasGpu) {
+    const availableGpuTypes = getAvailableGpuTypes(updatedConfig.machineSeries);
+    if (availableGpuTypes.length > 0) {
+      updatedConfig.gpuType = availableGpuTypes[0];
+      updatedConfig.gpuCount = 1;
+    }
+  }
+
+  if (updates.hasGpu === false) {
+    updatedConfig.gpuType = undefined;
+    updatedConfig.gpuCount = undefined;
+  }
+
+  if (updates.isCustom === true) {
+    updatedConfig.machineType = 'custom';
+  }
+
+  if (updates.isCustom === false && config.isCustom === true) {
+    const availableTypes = MACHINE_TYPES.filter((m) => m.startsWith(updatedConfig.machineSeries.toLowerCase()));
+    if (availableTypes.length > 0) {
+      updatedConfig.machineType = availableTypes[0];
+      const specs = getMachineTypeSpecs(availableTypes[0]);
+      updatedConfig.vcpus = specs.vcpus;
+      updatedConfig.memory = specs.memory;
+    }
+  }
+
+  const costs = calculateRealCost(updatedConfig);
+  updatedConfig.estimatedCost = costs.estimatedCost;
+  updatedConfig.onDemandCost = costs.onDemandCost;
+  updatedConfig.savings = costs.savings;
+
+  return updatedConfig;
+};
+
 export const useVmStore = create<VmStore>((set, get) => ({
   configurations: [],
   selectedIds: new Set<string>(),
@@ -207,7 +271,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
     }
     
     // Calculate costs
-    const costs = calculateMockCost(fullConfig)
+    const costs = calculateRealCost(fullConfig)
     fullConfig.estimatedCost = costs.estimatedCost
     fullConfig.onDemandCost = costs.onDemandCost
     fullConfig.savings = costs.savings
@@ -235,78 +299,22 @@ export const useVmStore = create<VmStore>((set, get) => ({
     set((state) => ({
       configurations: state.configurations.map((config) => {
         if (config.id === id) {
-          const updatedConfig = { ...config, ...updates }
-          
-          // Auto-update machine type specs if machine type changed
-          if (updates.machineType && updates.machineType !== config.machineType && !updatedConfig.isCustom) {
-            const specs = getMachineTypeSpecs(updates.machineType)
-            updatedConfig.vcpus = specs.vcpus
-            updatedConfig.memory = specs.memory
-          }
-          
-          // Auto-update machine types if series changed
-          if (updates.machineSeries && updates.machineSeries !== config.machineSeries && !updatedConfig.isCustom) {
-            const availableTypes = MACHINE_TYPES[updates.machineSeries] || []
-            if (availableTypes.length > 0) {
-              updatedConfig.machineType = availableTypes[0]
-              const specs = getMachineTypeSpecs(availableTypes[0])
-              updatedConfig.vcpus = specs.vcpus
-              updatedConfig.memory = specs.memory
-            }
-          }
-          
-          // Handle GPU support changes
-          if (updates.machineSeries && updates.machineSeries !== config.machineSeries) {
-            const supportsGpu = seriesSupportsGpu(updates.machineSeries)
-            if (!supportsGpu) {
-              updatedConfig.hasGpu = false
-              updatedConfig.gpuType = undefined
-              updatedConfig.gpuCount = undefined
-            }
-          }
-          
-          // If enabling GPU, set defaults
-          if (updates.hasGpu === true && !config.hasGpu) {
-            const availableGpuTypes = getAvailableGpuTypes(updatedConfig.machineSeries)
-            if (availableGpuTypes.length > 0) {
-              updatedConfig.gpuType = availableGpuTypes[0]
-              updatedConfig.gpuCount = 1
-            }
-          }
-          
-          // If disabling GPU, clear GPU fields
-          if (updates.hasGpu === false) {
-            updatedConfig.gpuType = undefined
-            updatedConfig.gpuCount = undefined
-          }
-          
-          // If switching to custom, don't auto-update specs
-          if (updates.isCustom === true) {
-            updatedConfig.machineType = 'custom'
-          }
-          
-          // If switching from custom to predefined, reset to series default
-          if (updates.isCustom === false && config.isCustom === true) {
-            const availableTypes = MACHINE_TYPES[updatedConfig.machineSeries] || []
-            if (availableTypes.length > 0) {
-              updatedConfig.machineType = availableTypes[0]
-              const specs = getMachineTypeSpecs(availableTypes[0])
-              updatedConfig.vcpus = specs.vcpus
-              updatedConfig.memory = specs.memory
-            }
-          }
-          
-          // Recalculate costs
-          const costs = calculateMockCost(updatedConfig)
-          updatedConfig.estimatedCost = costs.estimatedCost
-          updatedConfig.onDemandCost = costs.onDemandCost
-          updatedConfig.savings = costs.savings
-          
-          return updatedConfig
+          return updateAndRecalculateConfig(config, updates);
         }
-        return config
+        return config;
       }),
-    }))
+    }));
+  },
+
+  updateMultipleConfigurations: (ids, updates) => {
+    set((state) => ({
+      configurations: state.configurations.map((config) => {
+        if (ids.includes(config.id)) {
+          return updateAndRecalculateConfig(config, updates);
+        }
+        return config;
+      }),
+    }));
   },
 
   duplicateConfiguration: (id) => {
@@ -354,9 +362,9 @@ export const useVmStore = create<VmStore>((set, get) => ({
     switch (presetType) {
       case 'web-server':
         presetConfig = createDefaultConfiguration({
-          machineSeries: 'E2',
+          machineSeries: 'e2',
           machineType: 'e2-medium',
-          vcpus: 1,
+          vcpus: 2,
           memory: 4,
           operatingSystem: 'Linux',
           runningHours: 730,
@@ -369,7 +377,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
         break
       case 'database-server':
         presetConfig = createDefaultConfiguration({
-          machineSeries: 'N2',
+          machineSeries: 'n2',
           machineType: 'n2-standard-4',
           vcpus: 4,
           memory: 16,
@@ -384,7 +392,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
         break
       case 'compute-intensive':
         presetConfig = createDefaultConfiguration({
-          machineSeries: 'A2',
+          machineSeries: 'a2',
           machineType: 'a2-highgpu-1g',
           vcpus: 12,
           memory: 85,
@@ -526,3 +534,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
     return Math.round(total * 100) / 100
   },
 })) 
+
+// Example of how to use the store:
+// const { configurations, addConfiguration } = useVmStore.getState()
+// addConfiguration({ region: 'us-east1', ... })
