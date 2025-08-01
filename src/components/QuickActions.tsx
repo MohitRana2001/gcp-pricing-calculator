@@ -1,26 +1,23 @@
 "use client";
 
-import React, { useRef, useState } from "react";
-import Image from "next/image";
+import React from "react";
+import { motion } from "framer-motion";
 import {
   Server,
   Database,
-  Cpu,
-  Copy,
-  Trash2,
-  CheckSquare,
-  Square,
+  HardDrive,
   Upload,
   Download,
+  Trash2,
+  Copy,
+  Users,
   BarChart3,
   DollarSign,
-  Layers,
-  TrendingDown,
-  Zap,
-  Globe,
-  Cog,
+  TrendingUp,
+  CheckCircle,
 } from "lucide-react";
-import { useVmStore } from "@/store/vmStore";
+import Image from "next/image";
+import { useVmStore, ServiceType } from "@/store/vmStore";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,58 +27,27 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { REGIONS, MACHINE_SERIES } from "@/lib/calculator";
 
 export default function QuickActions() {
   const {
+    selectedService,
+    setSelectedService,
+    configurations,
     selectedIds,
-    addPresetConfiguration,
     removeMultipleConfigurations,
     duplicateMultipleConfigurations,
-    updateMultipleConfigurations,
     clearSelection,
+    exportToCSV,
+    importFromCSV,
     getTotalConfigurations,
     getAverageCost,
     getTotalSavings,
     getTotalMonthlyCost,
-    importFromCSV,
+    getComputeEngineCost,
+    getCloudStorageCost,
+    getCloudSQLCost,
+    getTotalServicesCost,
   } = useVmStore();
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [bulkRegion, setBulkRegion] = useState("");
-  const [bulkSeries, setBulkSeries] = useState("");
-
-  const selectedIdsArray = Array.from(selectedIds);
-  const hasSelection = selectedIds.size > 0;
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
-  const handleApplyBulkChanges = () => {
-    const updates: { region?: string; machineSeries?: string } = {};
-    if (bulkRegion) {
-      updates.region = bulkRegion;
-    }
-    if (bulkSeries) {
-      updates.machineSeries = bulkSeries;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      updateMultipleConfigurations(selectedIdsArray, updates);
-    }
-  };
 
   const handleImportCSV = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -95,292 +61,407 @@ export default function QuickActions() {
       };
       reader.readAsText(file);
     }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
   };
 
-  const presets = [
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  const handleServiceSelect = (service: ServiceType) => {
+    setSelectedService(service);
+  };
+
+  const services = [
     {
-      id: "web-server",
-      name: "Web Server",
-      description: "E2-medium, 50GB balanced disk",
-      estimatedCost: "~$24/month",
+      id: "compute-engine",
+      name: "Compute Engine",
+      description: "Virtual machines and computing resources",
       icon: Server,
-      onClick: () => addPresetConfiguration("web-server"),
+      color: "text-blue-500",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-200",
+      cost: getComputeEngineCost(),
+      configurations: configurations.length,
     },
     {
-      id: "database-server",
-      name: "Database Server",
-      description: "N2-standard-4, 200GB SSD",
-      estimatedCost: "~$89/month",
+      id: "cloud-storage",
+      name: "Cloud Storage",
+      description: "Object storage and file hosting",
+      icon: HardDrive,
+      color: "text-green-500",
+      bgColor: "bg-green-50",
+      borderColor: "border-green-200",
+      cost: getCloudStorageCost(),
+      configurations: 0, // Placeholder
+    },
+    {
+      id: "cloud-sql",
+      name: "Cloud SQL",
+      description: "Managed relational databases",
       icon: Database,
-      onClick: () => addPresetConfiguration("database-server"),
-    },
-    {
-      id: "compute-intensive",
-      name: "GPU Compute",
-      description: "A2-highgpu-1g, Spot pricing",
-      estimatedCost: "~$245/month",
-      icon: Cpu,
-      onClick: () => addPresetConfiguration("compute-intensive"),
+      color: "text-purple-500",
+      bgColor: "bg-purple-50",
+      borderColor: "border-purple-200",
+      cost: getCloudSQLCost(),
+      configurations: 0, // Placeholder
     },
   ];
 
   return (
     <div className="w-80 space-y-6">
+      {/* Service Selection */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Layers className="h-5 w-5" />
-            Quick Presets
-          </CardTitle>
-          <CardDescription>
-            Pre-configured VM templates for common use cases
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {presets.map((preset) => (
-            <Button
-              key={preset.id}
-              variant="outline"
-              className="w-full h-auto p-4 justify-start text-left"
-              onClick={preset.onClick}
-            >
-              <div className="flex items-start gap-3 w-full">
-                <preset.icon className="h-5 w-5 mt-0.5 text-primary" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm">{preset.name}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {preset.description}
-                  </div>
-                  <Badge variant="secondary" className="mt-1 text-xs">
-                    {preset.estimatedCost}
-                  </Badge>
-                </div>
-              </div>
-            </Button>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <CheckSquare className="h-5 w-5" />
-            Bulk Actions
-          </CardTitle>
-          <CardDescription>
-            Perform actions on multiple configurations
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {hasSelection && (
-            <div className="mb-3 p-3 bg-primary/10 rounded-md border border-primary/20">
-              <div className="text-sm font-medium text-primary mb-3">
-                {selectedIds.size} configuration
-                {selectedIds.size > 1 ? "s" : ""} selected
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-medium flex items-center gap-1 mb-1">
-                    <Globe className="h-3 w-3" />
-                    Region
-                  </label>
-                  <Select value={bulkRegion} onValueChange={setBulkRegion}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Apply new region..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {REGIONS.map((region) => (
-                        <SelectItem key={region} value={region}>
-                          {region}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium flex items-center gap-1 mb-1">
-                    <Cog className="h-3 w-3" />
-                    Series
-                  </label>
-                  <Select value={bulkSeries} onValueChange={setBulkSeries}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Apply new series..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MACHINE_SERIES.map((series) => (
-                        <SelectItem key={series} value={series}>
-                          {series}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={handleApplyBulkChanges}
-                  disabled={!bulkRegion && !bulkSeries}
-                >
-                  Apply Changes
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            disabled={!hasSelection}
-            onClick={() => duplicateMultipleConfigurations(selectedIdsArray)}
-          >
-            <Copy className="h-4 w-4 mr-2" />
-            Duplicate Selected
-          </Button>
-
-          <Button
-            variant="outline"
-            className="w-full justify-start text-destructive hover:text-destructive"
-            disabled={!hasSelection}
-            onClick={() => removeMultipleConfigurations(selectedIdsArray)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Selected
-          </Button>
-
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            disabled={!hasSelection}
-            onClick={clearSelection}
-          >
-            <Square className="h-4 w-4 mr-2" />
-            Clear Selection
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
+          <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            Statistics
+            GCP Services
           </CardTitle>
           <CardDescription>
-            Real-time overview of your configurations
+            Select a service to configure and estimate costs
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center justify-center mb-1">
-                <Layers className="h-4 w-4 text-primary" />
-              </div>
-              <div className="text-2xl font-bold">
-                {getTotalConfigurations()}
-              </div>
-              <div className="text-xs text-muted-foreground">Total Configs</div>
-            </div>
+        <CardContent className="space-y-3 flex-wrap">
+          {services.map((service) => {
+            const isSelected = selectedService === service.id;
+            const hasConfigurations = service.configurations > 0;
 
-            <div className="text-center p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center justify-center mb-1">
-                <DollarSign className="h-4 w-4 text-green-600" />
-              </div>
-              <div className="text-lg font-bold text-green-600">
-                {formatCurrency(getAverageCost())}
-              </div>
-              <div className="text-xs text-muted-foreground">Avg Cost</div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center p-2 bg-muted/30 rounded">
-              <div className="flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-green-600" />
-                <span className="text-sm">Total Savings</span>
-              </div>
-              <span className="font-semibold text-green-600">
-                {formatCurrency(getTotalSavings())}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center p-2 bg-muted/30 rounded">
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                <span className="text-sm">Total Monthly</span>
-              </div>
-              <span className="font-semibold">
-                {formatCurrency(getTotalMonthlyCost())}
-              </span>
-            </div>
-          </div>
+            return (
+              <motion.div
+                key={service.id}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Button
+                  variant="outline"
+                  className={`w-full justify-start h-auto p-4 relative ${
+                    isSelected
+                      ? "ring-2 ring-primary ring-offset-2"
+                      : "hover:bg-muted/50"
+                  }`}
+                  onClick={() => handleServiceSelect(service.id as ServiceType)}
+                >
+                  <div
+                    className={`p-2 rounded-lg mr-3 ${service.bgColor} ${service.borderColor} border`}
+                  >
+                    <service.icon className={`h-5 w-5 ${service.color}`} />
+                  </div>
+                  <div className="text-left flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{service.name}</span>
+                      {isSelected && (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground break-words text-wrap">
+                      {service.description}
+                    </div>
+                    {hasConfigurations && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary" className="text-xs">
+                          {service.configurations} configs
+                        </Badge>
+                        <span className="text-xs font-medium text-green-600">
+                          {formatCurrency(service.cost)}/month
+                        </span>
+                      </div>
+                    )}
+                    {service.id !== "compute-engine" && (
+                      <Badge variant="outline" className="text-xs mt-1">
+                        Coming Soon
+                      </Badge>
+                    )}
+                  </div>
+                </Button>
+              </motion.div>
+            );
+          })}
         </CardContent>
       </Card>
 
+      {/* Cost Summary */}
+      {getTotalServicesCost() > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Cost Summary
+            </CardTitle>
+            <CardDescription>
+              Total estimated monthly costs across all services
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {getComputeEngineCost() > 0 && (
+              <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2">
+                  <Server className="h-4 w-4 text-blue-500" />
+                  <span className="text-sm font-medium">Compute Engine</span>
+                </div>
+                <span className="font-semibold text-blue-600">
+                  {formatCurrency(getComputeEngineCost())}
+                </span>
+              </div>
+            )}
+
+            {getCloudStorageCost() > 0 && (
+              <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center gap-2">
+                  <HardDrive className="h-4 w-4 text-green-500" />
+                  <span className="text-sm font-medium">Cloud Storage</span>
+                </div>
+                <span className="font-semibold text-green-600">
+                  {formatCurrency(getCloudStorageCost())}
+                </span>
+              </div>
+            )}
+
+            {getCloudSQLCost() > 0 && (
+              <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-purple-500" />
+                  <span className="text-sm font-medium">Cloud SQL</span>
+                </div>
+                <span className="font-semibold text-purple-600">
+                  {formatCurrency(getCloudSQLCost())}
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center p-3 bg-primary/10 rounded-lg border border-primary/20">
+              <span className="text-sm font-semibold">Total Monthly Cost</span>
+              <span className="font-bold text-primary text-lg">
+                {formatCurrency(getTotalServicesCost())}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bulk Actions - Only show when Compute Engine is selected and has configurations */}
+      {selectedService === "compute-engine" && configurations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Bulk Actions
+            </CardTitle>
+            <CardDescription>
+              Perform actions on multiple selected configurations
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {selectedIds.size > 0 && (
+              <Badge variant="secondary" className="w-full justify-center">
+                {selectedIds.size} configurations selected
+              </Badge>
+            )}
+
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() =>
+                duplicateMultipleConfigurations(Array.from(selectedIds))
+              }
+              disabled={selectedIds.size === 0}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate Selected
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full justify-start text-destructive hover:text-destructive"
+              onClick={() =>
+                removeMultipleConfigurations(Array.from(selectedIds))
+              }
+              disabled={selectedIds.size === 0}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Selected
+            </Button>
+
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={clearSelection}
+              disabled={selectedIds.size === 0}
+            >
+              Clear Selection
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Statistics - Only show when Compute Engine is selected and has configurations */}
+      {selectedService === "compute-engine" && configurations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Statistics
+            </CardTitle>
+            <CardDescription>
+              Overview of your Compute Engine configurations
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                <div className="text-2xl font-bold text-primary">
+                  {getTotalConfigurations()}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Total Configs
+                </div>
+              </div>
+              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCurrency(getAverageCost())}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Average Cost
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  Total Savings
+                </span>
+                <span className="font-semibold text-green-600">
+                  {formatCurrency(getTotalSavings())}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-blue-500" />
+                  Monthly Cost
+                </span>
+                <span className="font-semibold">
+                  {formatCurrency(getTotalMonthlyCost())}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Import/Export - Only show when Compute Engine is selected */}
+      {selectedService === "compute-engine" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Import/Export
+            </CardTitle>
+            <CardDescription>
+              Manage your Compute Engine configurations with CSV files
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleImportCSV}
+              style={{ display: "none" }}
+              id="csv-import"
+            />
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => document.getElementById("csv-import")?.click()}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import CSV
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={exportToCSV}
+              disabled={configurations.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Multi-Cloud Comparison */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Zap className="h-5 w-5" />
-            Multi-Cloud Comparison
-          </CardTitle>
-          <CardDescription>
+          <CardTitle className="text-sm">Multi-Cloud Comparison</CardTitle>
+          <CardDescription className="text-xs">
             Compare pricing across cloud providers
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2">
           <Button
             variant="outline"
-            className="w-full h-auto p-4 justify-start text-left opacity-60 cursor-not-allowed"
+            className="w-full justify-start h-auto p-3"
             disabled
           >
-            <div className="flex items-start gap-3 w-full">
-              <div className="flex items-center justify-center w-8 h-8 bg-orange-50 rounded-lg border border-orange-200">
-                <Image
-                  src="/images/icons8-aws.svg"
-                  alt="AWS Logo"
-                  width={20}
-                  height={20}
-                  className="object-contain"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm">Amazon Web Services</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  EC2 pricing comparison
-                </div>
-                <Badge variant="secondary" className="mt-1 text-xs">
-                  Coming Soon
-                </Badge>
-              </div>
+            <Image
+              src="/images/icons8-aws.svg"
+              alt="AWS"
+              width={20}
+              height={20}
+              className="mr-3"
+            />
+            <div className="text-left flex-1">
+              <div className="text-sm font-medium">Amazon Web Services</div>
+              <Badge variant="secondary" className="text-xs mt-1">
+                Coming Soon
+              </Badge>
             </div>
           </Button>
 
           <Button
             variant="outline"
-            className="w-full h-auto p-4 justify-start text-left opacity-60 cursor-not-allowed"
+            className="w-full justify-start h-auto p-3"
             disabled
           >
-            <div className="flex items-start gap-3 w-full">
-              <div className="flex items-center justify-center w-8 h-8 bg-blue-50 rounded-lg border border-blue-200">
-                <Image
-                  src="/images/icons8-azure.svg"
-                  alt="Azure Logo"
-                  width={20}
-                  height={20}
-                  className="object-contain"
-                />
+            <Image
+              src="/images/icons8-azure.svg"
+              alt="Azure"
+              width={20}
+              height={20}
+              className="mr-3"
+            />
+            <div className="text-left flex-1">
+              <div className="text-sm font-medium">Microsoft Azure</div>
+              <Badge variant="secondary" className="text-xs mt-1">
+                Coming Soon
+              </Badge>
+            </div>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full justify-start h-auto p-3"
+            disabled
+          >
+            <Image
+              src="/images/icons8-google-cloud.svg"
+              alt="Google Cloud"
+              width={20}
+              height={20}
+              className="mr-3"
+            />
+            <div className="text-left flex-1">
+              <div className="text-sm font-medium text-emerald-600">
+                Google Cloud Platform
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm">Microsoft Azure</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  Virtual Machines pricing
-                </div>
-                <Badge variant="secondary" className="mt-1 text-xs">
-                  Coming Soon
-                </Badge>
-              </div>
+              <Badge variant="secondary" className="text-xs mt-1">
+                Coming Soon
+              </Badge>
             </div>
           </Button>
         </CardContent>

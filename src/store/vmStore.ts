@@ -1,16 +1,51 @@
 import { create } from 'zustand'
-import { VmConfig, calculateRealCost, getMachineTypeSpecs, seriesSupportsGpu, getAvailableGpuTypes, MACHINE_SERIES, MACHINE_TYPES, REGIONS } from '@/lib/calculator'
+import { VmConfig, calculateMockCost, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupportsExtendedMemory, getAllowedMemoryRange, loadMachineTypesData } from '@/lib/calculator'
+
+export type ServiceType = 'compute-engine' | 'cloud-storage' | 'cloud-sql' | null
+
+interface CloudStorageConfig {
+  id: string
+  name: string
+  storageClass: string
+  region: string
+  storageAmount: number // in GB
+  networkEgress: number // in GB
+  operations: number // number of operations
+  estimatedCost: number
+}
+
+interface CloudSQLConfig {
+  id: string
+  name: string
+  databaseEngine: string
+  tier: string
+  region: string
+  storage: number // in GB
+  backupStorage: number // in GB
+  estimatedCost: number
+}
 
 interface VmStore {
+  // Service selection
+  selectedService: ServiceType
+  setSelectedService: (service: ServiceType) => void
+  
+  // Compute Engine
   configurations: VmConfig[]
   selectedIds: Set<string>
+  dataLoaded: boolean
+  
+  // Cloud Storage (placeholder for future)
+  storageConfigurations: CloudStorageConfig[]
+  
+  // Cloud SQL (placeholder for future)
+  sqlConfigurations: CloudSQLConfig[]
   
   // Configuration management
   addConfiguration: (config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>) => void
   removeConfiguration: (id: string) => void
   removeMultipleConfigurations: (ids: string[]) => void
   updateConfiguration: (id: string, updates: Partial<VmConfig>) => void
-  updateMultipleConfigurations: (ids: string[], updates: Partial<VmConfig>) => void;
   duplicateConfiguration: (id: string) => void
   duplicateMultipleConfigurations: (ids: string[]) => void
   
@@ -19,19 +54,25 @@ interface VmStore {
   selectAll: () => void
   clearSelection: () => void
   
-  // Preset configurations
-  addPresetConfiguration: (presetType: 'web-server' | 'database-server' | 'compute-intensive') => void
-  
   // CSV operations with AI intelligence
   exportToCSV: () => void
   importFromCSV: (csvData: string) => Promise<void>
   intelligentCSVMapping: (csvData: string) => Promise<any[]>
+  
+  // Data loading
+  initializeData: () => Promise<void>
   
   // Statistics
   getTotalConfigurations: () => number
   getAverageCost: () => number
   getTotalSavings: () => number
   getTotalMonthlyCost: () => number
+  
+  // Service-specific statistics
+  getComputeEngineCost: () => number
+  getCloudStorageCost: () => number
+  getCloudSQLCost: () => number
+  getTotalServicesCost: () => number
 }
 
 function generateId(): string {
@@ -40,19 +81,24 @@ function generateId(): string {
 
 function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'> {
   const defaults = {
-    region: 'us-central1',
-    machineSeries: 'e2',
-    machineType: 'e2-standard-2',
+    name: 'e2-standard-2',
+    series: 'e2',
+    family: 'General-purpose',
+    description: '2 vCPUs 8 GB RAM',
+    regionLocation: 'us-central1',
+    vCpus: 2,
+    cpuPlatform: 'Intel Cascade Lake',
+    memoryGB: 8,
     isCustom: false,
-    vcpus: 2,
-    memory: 8,
-    operatingSystem: 'Linux',
-    runningHours: 730, // Full month (24 * 30.42 average days)
+    onDemandPerHour: 0.067123,
+    cudOneYearPerHour: 0.043630,
+    cudThreeYearPerHour: 0.030205,
+    spotPerHour: 0.013425,
+    runningHours: 730,
     quantity: 1,
+    discountModel: 'On-Demand',
     diskType: 'Balanced',
     diskSize: 50,
-    hasGpu: false,
-    discountModel: 'On-Demand',
     ...overrides
   }
   
@@ -87,29 +133,24 @@ function parseCSV(csvData: string): any[] {
 
 // AI-powered intelligent CSV field mapping
 async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<string, string>> {
-  // This simulates an AI agent that maps CSV headers to our field names
-  // In a real implementation, this would call an LLM API like Gemini
-  
   const fieldMappings: Record<string, string[]> = {
-    region: ['region', 'location', 'zone', 'area', 'datacenter', 'dc'],
-    machineSeries: ['series', 'machine_series', 'vm_series', 'instance_series', 'family', 'type_family'],
-    machineType: ['machine_type', 'instance_type', 'vm_type', 'type', 'size', 'flavor'],
-    operatingSystem: ['os', 'operating_system', 'system', 'platform', 'image'],
-    vcpus: ['vcpu', 'vcpus', 'cpu', 'cpus', 'cores', 'processors'],
-    memory: ['memory', 'ram', 'mem', 'memory_gb', 'ram_gb'],
-    runningHours: ['hours', 'running_hours', 'runtime', 'uptime', 'usage_hours'],
-    quantity: ['quantity', 'count', 'instances', 'num_instances', 'amount'],
-    diskType: ['disk_type', 'storage_type', 'disk', 'storage'],
-    diskSize: ['disk_size', 'storage_size', 'disk_gb', 'storage_gb'],
-    hasGpu: ['gpu', 'has_gpu', 'gpu_enabled', 'accelerator'],
-    gpuType: ['gpu_type', 'accelerator_type', 'gpu_model'],
-    gpuCount: ['gpu_count', 'num_gpus', 'accelerator_count'],
-    discountModel: ['discount', 'pricing_model', 'billing_model', 'commitment']
+    name: ['name', 'machine_type', 'instance_type', 'type'],
+    series: ['series', 'machine_series', 'family'],
+    family: ['family', 'machine_family', 'category'],
+    description: ['description', 'desc', 'summary'],
+    regionLocation: ['region', 'regionLocation', 'location', 'zone'],
+    vCpus: ['vcpu', 'vcpus', 'cpu', 'cpus', 'cores'],
+    cpuPlatform: ['cpuPlatform', 'cpu_platform', 'platform', 'processor'],
+    memoryGB: ['memory', 'memoryGB', 'ram', 'mem', 'memory_gb'],
+    runningHours: ['hours', 'running_hours', 'runtime', 'uptime'],
+    quantity: ['quantity', 'count', 'instances', 'num_instances'],
+    diskType: ['disk_type', 'storage_type', 'disk'],
+    diskSize: ['disk_size', 'storage_size', 'disk_gb'],
+    discountModel: ['discount', 'pricing_model', 'billing_model']
   }
   
   const mapping: Record<string, string> = {}
   
-  // Simple fuzzy matching algorithm (in real implementation, use LLM)
   for (const [targetField, aliases] of Object.entries(fieldMappings)) {
     for (const header of csvHeaders) {
       const normalizedHeader = header.toLowerCase().replace(/[\s_-]/g, '')
@@ -130,50 +171,40 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
   return mapping
 }
 
-// Smart data transformation using AI-like logic
+// Smart data transformation
 function transformValue(value: string, targetField: string): any {
   if (!value || value === '') return null
   
   switch (targetField) {
-    case 'vcpus':
-    case 'memory':
+    case 'vCpus':
+    case 'memoryGB':
     case 'runningHours':
     case 'quantity':
     case 'diskSize':
-    case 'gpuCount':
       return parseInt(value) || (targetField === 'quantity' ? 1 : 0)
     
-    case 'hasGpu':
-      return ['true', 'yes', '1', 'enabled'].includes(value.toLowerCase())
+    case 'onDemandPerHour':
+    case 'cudOneYearPerHour':
+    case 'cudThreeYearPerHour':
+    case 'spotPerHour':
+      return parseFloat(value) || 0
     
-    case 'operatingSystem':
-      // Smart OS mapping
-      const osValue = value.toLowerCase()
-      if (osValue.includes('windows')) return 'Windows Server'
-      if (osValue.includes('ubuntu')) return 'Ubuntu Pro'
-      if (osValue.includes('rhel') || osValue.includes('red hat')) return 'RHEL'
-      if (osValue.includes('suse') || osValue.includes('sles')) return 'SLES'
-      return 'Linux'
+    case 'series':
+      const seriesValue = value.toLowerCase()
+      if (['c4', 'c3', 'c3d', 'e2', 'n1', 'n2', 'n2d', 'n4', 'm1', 'm2', 'm3', 't2d'].includes(seriesValue)) {
+        return seriesValue
+      }
+      return 'e2'
     
-    case 'region':
-      // Smart region mapping
+    case 'regionLocation':
       const regionValue = value.toLowerCase().replace(/[\s_-]/g, '')
+      if (regionValue.includes('mumbai') || regionValue.includes('asia-south1')) return 'mumbai'
       if (regionValue.includes('uscentral') || regionValue.includes('central')) return 'us-central1'
       if (regionValue.includes('useast')) return 'us-east1'
       if (regionValue.includes('uswest')) return 'us-west1'
       if (regionValue.includes('europe') || regionValue.includes('eu')) return 'europe-west1'
       if (regionValue.includes('asia')) return 'asia-southeast1'
       return 'us-central1'
-    
-    case 'machineSeries':
-      // Smart series mapping
-      const seriesValue = value.toUpperCase()
-      if (MACHINE_SERIES.includes(seriesValue)) return seriesValue
-      if (value.toLowerCase().includes('general')) return 'n2'
-      if (value.toLowerCase().includes('compute')) return 'c3'
-      if (value.toLowerCase().includes('memory')) return 'm3'
-      if (value.toLowerCase().includes('gpu')) return 'a2'
-      return 'e2'
     
     case 'diskType':
       const diskValue = value.toLowerCase()
@@ -193,72 +224,24 @@ function transformValue(value: string, targetField: string): any {
   }
 }
 
-const updateAndRecalculateConfig = (config: VmConfig, updates: Partial<VmConfig>): VmConfig => {
-  const updatedConfig = { ...config, ...updates };
-
-  if (updates.machineType && updates.machineType !== config.machineType && !updatedConfig.isCustom) {
-    const specs = getMachineTypeSpecs(updates.machineType);
-    updatedConfig.vcpus = specs.vcpus;
-    updatedConfig.memory = specs.memory;
-  }
-
-  if (updates.machineSeries && updates.machineSeries !== config.machineSeries && !updatedConfig.isCustom) {
-    const availableTypes = MACHINE_TYPES.filter((m) => m.startsWith(updates.machineSeries!.toLowerCase()));
-    if (availableTypes.length > 0) {
-      updatedConfig.machineType = availableTypes[0];
-      const specs = getMachineTypeSpecs(availableTypes[0]);
-      updatedConfig.vcpus = specs.vcpus;
-      updatedConfig.memory = specs.memory;
-    }
-  }
-
-  if (updates.machineSeries && updates.machineSeries !== config.machineSeries) {
-    const supportsGpu = seriesSupportsGpu(updates.machineSeries);
-    if (!supportsGpu) {
-      updatedConfig.hasGpu = false;
-      updatedConfig.gpuType = undefined;
-      updatedConfig.gpuCount = undefined;
-    }
-  }
-
-  if (updates.hasGpu === true && !config.hasGpu) {
-    const availableGpuTypes = getAvailableGpuTypes(updatedConfig.machineSeries);
-    if (availableGpuTypes.length > 0) {
-      updatedConfig.gpuType = availableGpuTypes[0];
-      updatedConfig.gpuCount = 1;
-    }
-  }
-
-  if (updates.hasGpu === false) {
-    updatedConfig.gpuType = undefined;
-    updatedConfig.gpuCount = undefined;
-  }
-
-  if (updates.isCustom === true) {
-    updatedConfig.machineType = 'custom';
-  }
-
-  if (updates.isCustom === false && config.isCustom === true) {
-    const availableTypes = MACHINE_TYPES.filter((m) => m.startsWith(updatedConfig.machineSeries.toLowerCase()));
-    if (availableTypes.length > 0) {
-      updatedConfig.machineType = availableTypes[0];
-      const specs = getMachineTypeSpecs(availableTypes[0]);
-      updatedConfig.vcpus = specs.vcpus;
-      updatedConfig.memory = specs.memory;
-    }
-  }
-
-  const costs = calculateRealCost(updatedConfig);
-  updatedConfig.estimatedCost = costs.estimatedCost;
-  updatedConfig.onDemandCost = costs.onDemandCost;
-  updatedConfig.savings = costs.savings;
-
-  return updatedConfig;
-};
-
 export const useVmStore = create<VmStore>((set, get) => ({
+  // Service selection
+  selectedService: null,
+  setSelectedService: (service: ServiceType) => set({ selectedService: service }),
+  
+  // Compute Engine
   configurations: [],
   selectedIds: new Set<string>(),
+  dataLoaded: false,
+  
+  // Cloud Storage & SQL (placeholders)
+  storageConfigurations: [],
+  sqlConfigurations: [],
+
+  initializeData: async () => {
+    await loadMachineTypesData()
+    set({ dataLoaded: true })
+  },
 
   addConfiguration: (config) => {
     const id = generateId()
@@ -271,7 +254,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
     }
     
     // Calculate costs
-    const costs = calculateRealCost(fullConfig)
+    const costs = calculateMockCost(fullConfig)
     fullConfig.estimatedCost = costs.estimatedCost
     fullConfig.onDemandCost = costs.onDemandCost
     fullConfig.savings = costs.savings
@@ -299,22 +282,77 @@ export const useVmStore = create<VmStore>((set, get) => ({
     set((state) => ({
       configurations: state.configurations.map((config) => {
         if (config.id === id) {
-          return updateAndRecalculateConfig(config, updates);
+          const updatedConfig = { ...config, ...updates }
+          
+          // Handle custom memory validation
+          if (updates.isCustom !== undefined) {
+            if (updates.isCustom === false) {
+              // Switching from custom to predefined - load machine type data
+              const machineSpec = getMachineTypeSpecs(updatedConfig.name, updatedConfig.regionLocation)
+              if (machineSpec) {
+                updatedConfig.vCpus = machineSpec.vCpus
+                updatedConfig.memoryGB = machineSpec.memoryGB
+                updatedConfig.onDemandPerHour = machineSpec.onDemandPerHour
+                updatedConfig.cudOneYearPerHour = machineSpec.cudOneYearPerHour
+                updatedConfig.cudThreeYearPerHour = machineSpec.cudThreeYearPerHour
+                updatedConfig.spotPerHour = machineSpec.spotPerHour
+              }
+            }
+          }
+          
+          // Handle series change
+          if (updates.series && updates.series !== config.series) {
+            const availableTypes = getAvailableMachineTypes(updates.series, updatedConfig.regionLocation)
+            if (availableTypes.length > 0 && !updatedConfig.isCustom) {
+              const firstType = availableTypes[0]
+              updatedConfig.name = firstType.name
+              updatedConfig.vCpus = firstType.vCpus
+              updatedConfig.memoryGB = firstType.memoryGB
+              updatedConfig.onDemandPerHour = firstType.onDemandPerHour
+              updatedConfig.cudOneYearPerHour = firstType.cudOneYearPerHour
+              updatedConfig.cudThreeYearPerHour = firstType.cudThreeYearPerHour
+              updatedConfig.spotPerHour = firstType.spotPerHour
+            }
+          }
+          
+          // Handle region change
+          if (updates.regionLocation && updates.regionLocation !== config.regionLocation) {
+            const availableTypes = getAvailableMachineTypes(updatedConfig.series, updates.regionLocation)
+            if (availableTypes.length > 0 && !updatedConfig.isCustom) {
+              const matchingType = availableTypes.find(t => t.name === updatedConfig.name) || availableTypes[0]
+              updatedConfig.name = matchingType.name
+              updatedConfig.vCpus = matchingType.vCpus
+              updatedConfig.memoryGB = matchingType.memoryGB
+              updatedConfig.onDemandPerHour = matchingType.onDemandPerHour
+              updatedConfig.cudOneYearPerHour = matchingType.cudOneYearPerHour
+              updatedConfig.cudThreeYearPerHour = matchingType.cudThreeYearPerHour
+              updatedConfig.spotPerHour = matchingType.spotPerHour
+            }
+          }
+          
+          // Validate custom memory if in custom mode
+          if (updatedConfig.isCustom && (updates.vCpus || updates.memoryGB)) {
+            if (seriesSupportsExtendedMemory(updatedConfig.series)) {
+              const memoryRange = getAllowedMemoryRange(updatedConfig.series, updatedConfig.vCpus)
+              if (updatedConfig.memoryGB < memoryRange.min) {
+                updatedConfig.memoryGB = memoryRange.min
+              } else if (updatedConfig.memoryGB > memoryRange.max) {
+                updatedConfig.memoryGB = memoryRange.max
+              }
+            }
+          }
+          
+          // Recalculate costs
+          const costs = calculateMockCost(updatedConfig)
+          updatedConfig.estimatedCost = costs.estimatedCost
+          updatedConfig.onDemandCost = costs.onDemandCost
+          updatedConfig.savings = costs.savings
+          
+          return updatedConfig
         }
-        return config;
+        return config
       }),
-    }));
-  },
-
-  updateMultipleConfigurations: (ids, updates) => {
-    set((state) => ({
-      configurations: state.configurations.map((config) => {
-        if (ids.includes(config.id)) {
-          return updateAndRecalculateConfig(config, updates);
-        }
-        return config;
-      }),
-    }));
+    }))
   },
 
   duplicateConfiguration: (id) => {
@@ -356,64 +394,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
     set({ selectedIds: new Set() })
   },
 
-  addPresetConfiguration: (presetType) => {
-    let presetConfig: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>
-    
-    switch (presetType) {
-      case 'web-server':
-        presetConfig = createDefaultConfiguration({
-          machineSeries: 'e2',
-          machineType: 'e2-medium',
-          vcpus: 2,
-          memory: 4,
-          operatingSystem: 'Linux',
-          runningHours: 730,
-          quantity: 2,
-          diskType: 'Balanced',
-          diskSize: 50,
-          hasGpu: false,
-          discountModel: 'On-Demand',
-        })
-        break
-      case 'database-server':
-        presetConfig = createDefaultConfiguration({
-          machineSeries: 'n2',
-          machineType: 'n2-standard-4',
-          vcpus: 4,
-          memory: 16,
-          operatingSystem: 'Linux',
-          runningHours: 730,
-          quantity: 1,
-          diskType: 'SSD',
-          diskSize: 200,
-          hasGpu: false,
-          discountModel: '1-Year CUD',
-        })
-        break
-      case 'compute-intensive':
-        presetConfig = createDefaultConfiguration({
-          machineSeries: 'a2',
-          machineType: 'a2-highgpu-1g',
-          vcpus: 12,
-          memory: 85,
-          operatingSystem: 'Linux',
-          runningHours: 200,
-          quantity: 1,
-          diskType: 'Balanced',
-          diskSize: 100,
-          hasGpu: true,
-          gpuType: 'nvidia-tesla-a100',
-          gpuCount: 1,
-          discountModel: 'Spot VM',
-        })
-        break
-      default:
-        presetConfig = createDefaultConfiguration()
-    }
-    
-    get().addConfiguration(presetConfig)
-  },
-
   exportToCSV: () => {
     const configs = get().configurations
     if (configs.length === 0) {
@@ -422,21 +402,24 @@ export const useVmStore = create<VmStore>((set, get) => ({
     }
 
     const headers = [
-      'Region',
-      'Machine Series',
-      'Machine Type',
-      'Is Custom',
-      'Operating System',
+      'Name',
+      'Series',
+      'Family',
+      'Description',
+      'Region Location',
       'vCPUs',
+      'CPU Platform',
       'Memory (GB)',
+      'Is Custom',
       'Running Hours',
       'Quantity',
-      'Has GPU',
-      'GPU Type',
-      'GPU Count',
       'Disk Type',
       'Disk Size (GB)',
       'Discount Model',
+      'On-Demand Per Hour ($)',
+      'CUD 1-Year Per Hour ($)',
+      'CUD 3-Year Per Hour ($)',
+      'Spot Per Hour ($)',
       'Estimated Cost ($)',
       'On-Demand Cost ($)',
       'Savings ($)'
@@ -445,21 +428,24 @@ export const useVmStore = create<VmStore>((set, get) => ({
     const csvContent = [
       headers.join(','),
       ...configs.map(config => [
-        config.region,
-        config.machineSeries,
-        config.machineType,
+        config.name,
+        config.series,
+        config.family,
+        config.description,
+        config.regionLocation,
+        config.vCpus,
+        config.cpuPlatform,
+        config.memoryGB,
         config.isCustom,
-        config.operatingSystem,
-        config.vcpus,
-        config.memory,
         config.runningHours,
         config.quantity,
-        config.hasGpu,
-        config.gpuType || '',
-        config.gpuCount || '',
         config.diskType,
         config.diskSize,
         config.discountModel,
+        config.onDemandPerHour,
+        config.cudOneYearPerHour,
+        config.cudThreeYearPerHour,
+        config.spotPerHour,
         config.estimatedCost,
         config.onDemandCost,
         config.savings
@@ -467,7 +453,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
     ].join('\n')
 
     const timestamp = new Date().toISOString().split('T')[0]
-    downloadCSV(csvContent, `gcp-pricing-${timestamp}.csv`)
+    downloadCSV(csvContent, `gcp-compute-engine-${timestamp}.csv`)
   },
 
   intelligentCSVMapping: async (csvData: string) => {
@@ -480,7 +466,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
     return parsedData.map(row => {
       const mappedConfig: any = {}
       
-      // Apply intelligent field mapping
       for (const [targetField, sourceHeader] of Object.entries(fieldMapping)) {
         if (row[sourceHeader]) {
           const transformedValue = transformValue(row[sourceHeader], targetField)
@@ -490,7 +475,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
         }
       }
       
-      // Fill in defaults for missing fields
       const defaultConfig = createDefaultConfiguration()
       const finalConfig = { ...defaultConfig, ...mappedConfig }
       
@@ -502,7 +486,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
     try {
       const mappedConfigurations = await get().intelligentCSVMapping(csvData)
       
-      // Add all configurations
       mappedConfigurations.forEach(config => get().addConfiguration(config))
       
       alert(`Successfully imported ${mappedConfigurations.length} configurations with intelligent field mapping!`)
@@ -532,6 +515,27 @@ export const useVmStore = create<VmStore>((set, get) => ({
     const configs = get().configurations
     const total = configs.reduce((sum, config) => sum + config.estimatedCost, 0)
     return Math.round(total * 100) / 100
+  },
+
+  // Service-specific costs
+  getComputeEngineCost: () => {
+    const configs = get().configurations
+    const total = configs.reduce((sum, config) => sum + config.estimatedCost, 0)
+    return Math.round(total * 100) / 100
+  },
+
+  getCloudStorageCost: () => {
+    // Placeholder - will be implemented when Cloud Storage is added
+    return 0
+  },
+
+  getCloudSQLCost: () => {
+    // Placeholder - will be implemented when Cloud SQL is added
+    return 0
+  },
+
+  getTotalServicesCost: () => {
+    return get().getComputeEngineCost() + get().getCloudStorageCost() + get().getCloudSQLCost()
   },
 })) 
 
