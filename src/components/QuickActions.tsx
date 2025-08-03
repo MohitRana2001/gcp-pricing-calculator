@@ -15,9 +15,18 @@ import {
   DollarSign,
   TrendingUp,
   CheckCircle,
+  ExternalLink,
+  Share2,
+  Link,
 } from "lucide-react";
 import Image from "next/image";
 import { useVmStore, ServiceType } from "@/store/vmStore";
+import {
+  generateIndividualUrls,
+  generateBulkUrl,
+  openOfficialCalculatorForResearch,
+  analyzeGcpUrl,
+} from "@/lib/gcpUrlGenerator";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -27,6 +36,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import GcpUrlGeneratorButtons from "./GcpUrlGeneratorButtons";
 
 export default function QuickActions() {
   const {
@@ -353,7 +363,7 @@ export default function QuickActions() {
       )}
 
       {/* Import/Export - Only show when Compute Engine is selected */}
-      {selectedService === "compute-engine" && (
+      {/* {selectedService === "compute-engine" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -390,6 +400,66 @@ export default function QuickActions() {
               <Download className="h-4 w-4 mr-2" />
               Export CSV
             </Button>
+          </CardContent>
+        </Card>
+      )} */}
+
+      {/* GCP Calculator Integration - Only show when Compute Engine is selected */}
+      {selectedService === "compute-engine" && configurations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Share2 className="h-5 w-5" />
+              Share via GCP Calculator
+            </CardTitle>
+            <CardDescription>
+              Generate links using browser automation to fill the official
+              calculator
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <GcpUrlGeneratorButtons configurations={configurations} />
+
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>• Uses browser automation to fill official calculator</div>
+              <div>
+                • Bulk link includes all {configurations.length} configurations
+              </div>
+              <div>• Individual links available in table actions</div>
+              <div>• Process may take 10-30 seconds per configuration</div>
+            </div>
+
+            {/* Development/Research Tools */}
+            {process.env.NODE_ENV === "development" && (
+              <div className="border-t pt-3 space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Development Tools:
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8"
+                  onClick={() => openOfficialCalculatorForResearch()}
+                >
+                  <BarChart3 className="h-3 w-3 mr-2" />
+                  Open GCP Calculator
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8"
+                  onClick={async () => {
+                    const { testAutomation } = await import(
+                      "@/lib/gcpUrlGenerator"
+                    );
+                    testAutomation();
+                  }}
+                >
+                  <ExternalLink className="h-3 w-3 mr-2" />
+                  Test Automation
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -437,28 +507,6 @@ export default function QuickActions() {
             />
             <div className="text-left flex-1">
               <div className="text-sm font-medium">Microsoft Azure</div>
-              <Badge variant="secondary" className="text-xs mt-1">
-                Coming Soon
-              </Badge>
-            </div>
-          </Button>
-
-          <Button
-            variant="outline"
-            className="w-full justify-start h-auto p-3"
-            disabled
-          >
-            <Image
-              src="/images/icons8-google-cloud.svg"
-              alt="Google Cloud"
-              width={20}
-              height={20}
-              className="mr-3"
-            />
-            <div className="text-left flex-1">
-              <div className="text-sm font-medium text-emerald-600">
-                Google Cloud Platform
-              </div>
               <Badge variant="secondary" className="text-xs mt-1">
                 Coming Soon
               </Badge>

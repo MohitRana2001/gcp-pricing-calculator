@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Trash2, Plus, Settings } from "lucide-react";
+import { Copy, Trash2, Plus, Settings, ExternalLink } from "lucide-react";
 import { useVmStore } from "@/store/vmStore";
 import {
   REGIONS,
@@ -14,6 +14,7 @@ import {
   getAllowedMemoryRange,
   getAvailableMachineTypes,
 } from "@/lib/calculator";
+import { generateGcpCalculatorUrl } from "@/lib/gcpUrlGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -755,6 +756,33 @@ export default function SpreadsheetCalculator() {
                             onClick={() => removeConfiguration(config.id)}
                           >
                             <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={async () => {
+                              try {
+                                const { generateGcpCalculatorUrl } =
+                                  await import("@/lib/gcpUrlGenerator");
+                                const url = await generateGcpCalculatorUrl([
+                                  config,
+                                ]);
+                                window.open(url, "_blank");
+                              } catch (error) {
+                                console.error(
+                                  "Failed to generate GCP URL:",
+                                  error
+                                );
+                                // Fallback to opening the calculator manually
+                                window.open(
+                                  "https://cloud.google.com/products/calculator",
+                                  "_blank"
+                                );
+                              }
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>

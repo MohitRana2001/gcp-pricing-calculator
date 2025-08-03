@@ -16,6 +16,11 @@
 # production
 /build
 
+# Debug automation assets
+/automation-screenshots
+/automation-traces
+/automation-videos
+
 # misc
 .DS_Store
 *.pem
