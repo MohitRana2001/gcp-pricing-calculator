@@ -7,12 +7,12 @@ export interface VmConfig {
   regionLocation: string // Region (e.g., Mumbai, us-central1)
   vCpus: number
   cpuPlatform: string // CPU Platform (e.g., "AMD Milan, AMD Rome")
-  memoryGB: number
-  isCustom: boolean // For custom machine configurations
-  
+  memoryGB: number;
+  isCustom: boolean; // For custom machine configurations
+
   // Pricing structure (per hour rates)
-  onDemandPerHour: number // On-demand per hour
-  cudOneYearPerHour: number // Resource-based CUD - 1 year
+  onDemandPerHour: number; // On-demand per hour
+  cudOneYearPerHour: number; // Resource-based CUD - 1 year
   cudThreeYearPerHour: number // Resource-based CUD - 3 year
   spotPerHour: number // Per month Spot (converted to hourly)
   
@@ -38,18 +38,29 @@ export interface CostCalculation {
 }
 
 export interface MachineTypeData {
-  name: string
-  series: string
-  family: string
-  description: string
-  regionLocation: string
-  vCpus: number
-  cpuPlatform: string
-  memoryGB: number
-  onDemandPerHour: number
-  cudOneYearPerHour: number
-  cudThreeYearPerHour: number
-  spotPerHour: number
+  name: string;
+  series: string;
+  family: string;
+  description: string;
+  regionLocation: string;
+  vCpus: number;
+  cpuPlatform: string;
+  memoryGB: number;
+  onDemandPerHour: number;
+  cudOneYearPerHour: number;
+  cudThreeYearPerHour: number;
+  spotPerHour: number;
+  month: number;
+  month1yCud: number;
+  month3yCud: number;
+  monthSles: number;
+  monthSlesSap: number;
+  monthSlesSap1yCud: number;
+  monthSlesSap3yCud: number;
+  monthRhel: number;
+  monthRhel1yCud: number;
+  monthRhel3yCud: number;
+  monthWindows: number;
 }
 
 // Machine series and families
@@ -95,12 +106,7 @@ export const DISK_PRICING: Record<string, number> = {
 export const DISK_TYPES = ['Standard', 'Balanced', 'SSD']
 
 // Discount models
-export const DISCOUNT_MODELS = [
-  'On-Demand', 
-  '1-Year CUD', 
-  '3-Year CUD', 
-  'Spot VM'
-]
+
 
 // Memory configuration for custom instances
 export const MEMORY_CONFIGS: Record<string, { minMemoryPerVcpu: number; maxMemoryPerVcpu: number; supportsExtendedMemory: boolean }> = {
@@ -146,9 +152,9 @@ let machineTypesData: MachineTypeData[] = []
 
 export async function loadMachineTypesData(): Promise<void> {
   try {
-    const response = await fetch('/data/machine-data.json')
-    const data = await response.json()
-    
+    const response = await fetch('/data/machine-data.json');
+    const data = await response.json();
+
     // Transform the data to match our interface
     machineTypesData = data.map((item: any) => ({
       name: item.name,
@@ -159,15 +165,93 @@ export async function loadMachineTypesData(): Promise<void> {
       vCpus: item.vCpus,
       cpuPlatform: getCpuPlatform(item.series),
       memoryGB: item.memoryGB,
-      onDemandPerHour: item.price / 730, // Convert monthly to hourly
-      cudOneYearPerHour: (item.price * 0.65) / 730, // 35% discount
-      cudThreeYearPerHour: (item.price * 0.45) / 730, // 55% discount  
-      spotPerHour: (item.price * 0.2) / 730, // 80% discount
-    }))
+      onDemandPerHour: item.hour,
+      cudOneYearPerHour: item.month1yCud / 730,
+      cudThreeYearPerHour: item.month3yCud / 730,
+      spotPerHour: item.hourSpot,
+      month: item.month,
+      month1yCud: item.month1yCud,
+      month3yCud: item.month3yCud,
+      monthSles: item.monthSles,
+      monthSlesSap: item.monthSlesSap,
+      monthSlesSap1yCud: item.monthSlesSap1yCud,
+      monthSlesSap3yCud: item.monthSlesSap3yCud,
+      monthRhel: item.monthRhel,
+      monthRhel1yCud: item.monthRhel1yCud,
+      monthRhel3yCud: item.monthRhel3yCud,
+      monthWindows: item.monthWindows,
+    }));
   } catch (error) {
-    console.error('Failed to load machine types data:', error)
+    console.error('Failed to load machine types data:', error);
   }
 }
+
+export interface PricingDetails {
+  onDemand: number;
+  cud1y: number;
+  cud3y: number;
+  winOrRhelLics: number;
+  rhelLics1yCud: number;
+  rhelLics3yCud: number;
+  sqlStdLics: number;
+  sqlEeLics: number;
+  onDemandAllInclusive: number;
+  cud1yAllInclusive: number;
+  cud3yAllInclusive: number;
+}
+
+export function getPricing(config: VmConfig): PricingDetails {
+  const machine = machineTypesData.find(
+    (m) => m.name === config.name && m.regionLocation === config.regionLocation
+  );
+
+  if (!machine) {
+    return {
+      onDemand: 0,
+      cud1y: 0,
+      cud3y: 0,
+      winOrRhelLics: 0,
+      rhelLics1yCud: 0,
+      rhelLics3yCud: 0,
+      sqlStdLics: 0,
+      sqlEeLics: 0,
+      onDemandAllInclusive: 0,
+      cud1yAllInclusive: 0,
+      cud3yAllInclusive: 0,
+    };
+  }
+
+  const onDemand = machine.month;
+  const cud1y = machine.month1yCud;
+  const cud3y = machine.month3yCud;
+
+  const winOrRhelLics = machine.monthWindows || machine.monthRhel;
+  const rhelLics1yCud = machine.monthRhel1yCud;
+  const rhelLics3yCud = machine.monthRhel3yCud;
+
+  const sqlCores = Math.max(4, config.vCpus);
+  const sqlStdLics = 0.1200 * sqlCores * config.runningHours;
+  const sqlEeLics = 0.399 * sqlCores * config.runningHours;
+
+  const onDemandAllInclusive = onDemand + winOrRhelLics + sqlStdLics;
+  const cud1yAllInclusive = cud1y + rhelLics1yCud + sqlStdLics;
+  const cud3yAllInclusive = cud3y + rhelLics3yCud + sqlStdLics;
+
+  return {
+    onDemand,
+    cud1y,
+    cud3y,
+    winOrRhelLics,
+    rhelLics1yCud,
+    rhelLics3yCud,
+    sqlStdLics,
+    sqlEeLics,
+    onDemandAllInclusive,
+    cud1yAllInclusive,
+    cud3yAllInclusive,
+  };
+}
+
 
 // Get CPU platform based on series
 function getCpuPlatform(series: string): string {
@@ -203,49 +287,7 @@ export function getMachineTypeSpecs(machineTypeName: string, region: string): Ma
   ) || null
 }
 
-export function calculateMockCost(config: VmConfig): CostCalculation {
-  let hourlyRate = 0
-  
-  // Select pricing based on discount model
-  switch (config.discountModel) {
-    case '1-Year CUD':
-      hourlyRate = config.cudOneYearPerHour
-      break
-    case '3-Year CUD':
-      hourlyRate = config.cudThreeYearPerHour
-      break
-    case 'Spot VM':
-      hourlyRate = config.spotPerHour
-      break
-    case 'On-Demand':
-    default:
-      hourlyRate = config.onDemandPerHour
-      break
-  }
-  
-  // Calculate compute cost
-  const computeCost = hourlyRate * config.runningHours * config.quantity
-  
-  // Calculate storage cost
-  const diskPricing = DISK_PRICING[config.diskType] || 0.04
-  const storageCost = config.diskSize * diskPricing * config.quantity
-  
-  // Total estimated cost
-  const estimatedCost = computeCost + storageCost
-  
-  // On-demand cost for comparison
-  const onDemandComputeCost = config.onDemandPerHour * config.runningHours * config.quantity
-  const onDemandCost = onDemandComputeCost + storageCost
-  
-  // Calculate savings
-  const savings = onDemandCost - estimatedCost
-  
-  return {
-    estimatedCost: Math.round(estimatedCost * 100) / 100,
-    onDemandCost: Math.round(onDemandCost * 100) / 100,
-    savings: Math.round(savings * 100) / 100,
-  }
-}
+
 
 // Initialize data loading
 if (typeof window !== 'undefined') {

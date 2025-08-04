@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { VmConfig, calculateMockCost, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupportsExtendedMemory, getAllowedMemoryRange, loadMachineTypesData } from '@/lib/calculator'
+import { VmConfig, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupportsExtendedMemory, getAllowedMemoryRange, loadMachineTypesData } from '@/lib/calculator'
 
 export type ServiceType = 'compute-engine' | 'cloud-storage' | 'cloud-sql' | null
 
@@ -96,7 +96,6 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     spotPerHour: 0.013425,
     runningHours: 730,
     quantity: 1,
-    discountModel: 'On-Demand',
     diskType: 'Balanced',
     diskSize: 50,
     ...overrides
@@ -146,7 +145,6 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
     quantity: ['quantity', 'count', 'instances', 'num_instances'],
     diskType: ['disk_type', 'storage_type', 'disk'],
     diskSize: ['disk_size', 'storage_size', 'disk_gb'],
-    discountModel: ['discount', 'pricing_model', 'billing_model']
   }
   
   const mapping: Record<string, string> = {}
@@ -212,13 +210,6 @@ function transformValue(value: string, targetField: string): any {
       if (diskValue.includes('balanced')) return 'Balanced'
       return 'Standard'
     
-    case 'discountModel':
-      const discountValue = value.toLowerCase()
-      if (discountValue.includes('spot')) return 'Spot VM'
-      if (discountValue.includes('1') && discountValue.includes('year')) return '1-Year CUD'
-      if (discountValue.includes('3') && discountValue.includes('year')) return '3-Year CUD'
-      return 'On-Demand'
-    
     default:
       return value
   }
@@ -252,12 +243,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
       onDemandCost: 0,
       savings: 0,
     }
-    
-    // Calculate costs
-    const costs = calculateMockCost(fullConfig)
-    fullConfig.estimatedCost = costs.estimatedCost
-    fullConfig.onDemandCost = costs.onDemandCost
-    fullConfig.savings = costs.savings
     
     set((state) => ({
       configurations: [...state.configurations, fullConfig],
@@ -342,12 +327,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
             }
           }
           
-          // Recalculate costs
-          const costs = calculateMockCost(updatedConfig)
-          updatedConfig.estimatedCost = costs.estimatedCost
-          updatedConfig.onDemandCost = costs.onDemandCost
-          updatedConfig.savings = costs.savings
-          
           return updatedConfig
         }
         return config
@@ -415,7 +394,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
       'Quantity',
       'Disk Type',
       'Disk Size (GB)',
-      'Discount Model',
       'On-Demand Per Hour ($)',
       'CUD 1-Year Per Hour ($)',
       'CUD 3-Year Per Hour ($)',
@@ -441,7 +419,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
         config.quantity,
         config.diskType,
         config.diskSize,
-        config.discountModel,
         config.onDemandPerHour,
         config.cudOneYearPerHour,
         config.cudThreeYearPerHour,

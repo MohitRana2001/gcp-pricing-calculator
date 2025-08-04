@@ -9,10 +9,11 @@ import {
   MACHINE_SERIES,
   MACHINE_FAMILIES,
   DISK_TYPES,
-  DISCOUNT_MODELS,
   seriesSupportsExtendedMemory,
   getAllowedMemoryRange,
   getAvailableMachineTypes,
+  getPricing,
+  PricingDetails,
 } from "@/lib/calculator";
 import { generateGcpCalculatorUrl } from "@/lib/gcpUrlGenerator";
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,6 @@ export default function SpreadsheetCalculator() {
       spotPerHour: 0.013425,
       runningHours: 730,
       quantity: 1,
-      discountModel: "On-Demand",
       diskType: "Balanced",
       diskSize: 50,
     });
@@ -254,11 +254,38 @@ export default function SpreadsheetCalculator() {
                 <th className="min-w-[130px] p-3 text-left font-semibold">
                   Disk Size (GB)
                 </th>
-                <th className="min-w-[140px] p-3 text-left font-semibold">
-                  Discount Model
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  On-Demand
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  Monthly Cost
+                  CUD - 1yr
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  CUD - 3yr
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  Win or Red-Hat Lics(If Any)
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  Red-Hat Lics(CUD 1Yrs)
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  Red-Hat Lics(CUD 3Yrs)
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  SQL Std. Lics
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  SQL EE. Lics
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  On-Demand(All inclusive)
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  CUD - 1yr(All inclusive)
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  CUD - 3yr(All inclusive)
                 </th>
                 <th className="w-24 p-3 text-left font-semibold">Actions</th>
               </tr>
@@ -271,6 +298,7 @@ export default function SpreadsheetCalculator() {
                     config.series,
                     config.regionLocation
                   );
+                  const pricing = getPricing(config);
 
                   return (
                     <motion.tr
@@ -690,45 +718,80 @@ export default function SpreadsheetCalculator() {
                         )}
                       </td>
 
-                      {/* Discount Model */}
+                      {/* On-Demand */}
                       <td className="p-3">
-                        <Select
-                          value={config.discountModel}
-                          onValueChange={(value) =>
-                            handleInputChange(config.id, "discountModel", value)
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DISCOUNT_MODELS.map((model) => (
-                              <SelectItem key={model} value={model}>
-                                {model}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="text-sm">
+                          {formatCurrency(pricing.onDemand)}
+                        </div>
                       </td>
 
-                      {/* Monthly Cost */}
+                      {/* CUD 1-Year */}
                       <td className="p-3">
-                        <div className="flex flex-col gap-1">
-                          <div className="font-semibold text-green-600">
-                            {formatCurrency(config.estimatedCost)}
-                          </div>
-                          {config.savings > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              Save {formatCurrency(config.savings)}
-                            </Badge>
-                          )}
-                          <div className="text-xs text-muted-foreground">
-                            {config.quantity > 1 &&
-                              `${config.quantity}x instances`}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatCurrency(config.onDemandPerHour)}/hr
-                          </div>
+                        <div className="text-sm">
+                          {formatCurrency(pricing.cud1y)}
+                        </div>
+                      </td>
+
+                      {/* CUD 3-Year */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.cud3y)}
+                        </div>
+                      </td>
+
+                      {/* Win or Red-Hat Lics(If Any) */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.winOrRhelLics)}
+                        </div>
+                      </td>
+
+                      {/* Red-Hat Lics(CUD 1Yrs) */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.rhelLics1yCud)}
+                        </div>
+                      </td>
+
+                      {/* Red-Hat Lics(CUD 3Yrs) */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.rhelLics3yCud)}
+                        </div>
+                      </td>
+
+                      {/* SQL Std. Lics */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.sqlStdLics)}
+                        </div>
+                      </td>
+
+                      {/* SQL EE. Lics */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.sqlEeLics)}
+                        </div>
+                      </td>
+
+                      {/* On-Demand(All inclusive) */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.onDemandAllInclusive)}
+                        </div>
+                      </td>
+
+                      {/* CUD - 1yr(All inclusive) */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.cud1yAllInclusive)}
+                        </div>
+                      </td>
+
+                      {/* CUD - 3yr(All inclusive) */}
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {formatCurrency(pricing.cud3yAllInclusive)}
                         </div>
                       </td>
 
