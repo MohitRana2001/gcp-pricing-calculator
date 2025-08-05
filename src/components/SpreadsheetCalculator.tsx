@@ -8,7 +8,6 @@ import {
   REGIONS,
   MACHINE_SERIES,
   MACHINE_FAMILIES,
-  DISK_TYPES,
   seriesSupportsExtendedMemory,
   getAllowedMemoryRange,
   getAvailableMachineTypes,
@@ -82,8 +81,8 @@ export default function SpreadsheetCalculator() {
       spotPerHour: 0.013425,
       runningHours: 730,
       quantity: 1,
-      diskType: "Balanced",
-      diskSize: 50,
+      os: "linux",
+      sqlLicense: "none",
     });
   };
 
@@ -221,6 +220,9 @@ export default function SpreadsheetCalculator() {
                 <th className="min-w-[100px] p-3 text-left font-semibold">
                   Series
                 </th>
+                <th className="min-w-[200px] p-3 text-left font-semibold">
+                  Machine Type
+                </th>
                 <th className="min-w-[140px] p-3 text-left font-semibold">
                   Family
                 </th>
@@ -248,11 +250,11 @@ export default function SpreadsheetCalculator() {
                 <th className="min-w-[100px] p-3 text-left font-semibold">
                   Quantity
                 </th>
-                <th className="min-w-[120px] p-3 text-left font-semibold">
-                  Disk Type
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  OS
                 </th>
-                <th className="min-w-[130px] p-3 text-left font-semibold">
-                  Disk Size (GB)
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  SQL License
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
                   On-Demand
@@ -264,28 +266,25 @@ export default function SpreadsheetCalculator() {
                   CUD - 3yr
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  Win or Red-Hat Lics(If Any)
+                  OS On-Demand
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  Red-Hat Lics(CUD 1Yrs)
+                  OS 1-Year CUD
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  Red-Hat Lics(CUD 3Yrs)
+                  OS 3-Year CUD
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  SQL Std. Lics
+                  SQL License Cost
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  SQL EE. Lics
+                  On-Demand Inclusive
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  On-Demand(All inclusive)
+                  1-Year CUD Inclusive
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  CUD - 1yr(All inclusive)
-                </th>
-                <th className="min-w-[150px] p-3 text-left font-semibold">
-                  CUD - 3yr(All inclusive)
+                  3-Year CUD Inclusive
                 </th>
                 <th className="w-24 p-3 text-left font-semibold">Actions</th>
               </tr>
@@ -323,125 +322,83 @@ export default function SpreadsheetCalculator() {
 
                       {/* Series */}
                       <td className="p-3">
-                        {config.isCustom ? (
-                          <div className="flex items-center gap-2">
-                            <Settings className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">
-                              Custom
-                            </span>
-                          </div>
-                        ) : (
-                          <Select
-                            value={config.name}
-                            onValueChange={(value) => {
-                              // Check if it's a series change or machine type change
-                              const isSeriesValue =
-                                MACHINE_SERIES.includes(value);
-
-                              if (isSeriesValue) {
-                                // Series change - update to first available machine type
-                                handleInputChange(config.id, "series", value);
-                                const availableTypes = getAvailableMachineTypes(
-                                  value,
-                                  config.regionLocation
-                                );
-                                if (availableTypes.length > 0) {
-                                  const firstType = availableTypes[0];
-                                  updateConfiguration(config.id, {
-                                    series: value,
-                                    name: firstType.name,
-                                    vCpus: firstType.vCpus,
-                                    memoryGB: firstType.memoryGB,
-                                    description: firstType.description,
-                                    cpuPlatform: firstType.cpuPlatform,
-                                    onDemandPerHour: firstType.onDemandPerHour,
-                                    cudOneYearPerHour:
-                                      firstType.cudOneYearPerHour,
-                                    cudThreeYearPerHour:
-                                      firstType.cudThreeYearPerHour,
-                                    spotPerHour: firstType.spotPerHour,
-                                  });
-                                }
-                              } else {
-                                // Machine type change
-                                const selectedType = availableTypes.find(
-                                  (t) => t.name === value
-                                );
-                                if (selectedType) {
-                                  updateConfiguration(config.id, {
-                                    name: selectedType.name,
-                                    vCpus: selectedType.vCpus,
-                                    memoryGB: selectedType.memoryGB,
-                                    description: selectedType.description,
-                                    cpuPlatform: selectedType.cpuPlatform,
-                                    onDemandPerHour:
-                                      selectedType.onDemandPerHour,
-                                    cudOneYearPerHour:
-                                      selectedType.cudOneYearPerHour,
-                                    cudThreeYearPerHour:
-                                      selectedType.cudThreeYearPerHour,
-                                    spotPerHour: selectedType.spotPerHour,
-                                  });
-                                }
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-8 text-sm">
-                              <SelectValue
-                                placeholder={config.series.toUpperCase()}
-                              />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {/* Series Options */}
-                              <SelectItem value={config.series}>
-                                <div className="flex items-center gap-2 font-semibold text-primary">
-                                  {seriesSupportsExtendedMemory(
-                                    config.series
-                                  ) && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-xs"
-                                    >
-                                      Ext
-                                    </Badge>
-                                  )}
-                                  {config.series.toUpperCase()} Series
-                                </div>
+                        <Select
+                          value={config.series}
+                          onValueChange={(value) => {
+                            handleInputChange(config.id, "series", value);
+                            const availableTypes = getAvailableMachineTypes(
+                              value,
+                              config.regionLocation
+                            );
+                            if (availableTypes.length > 0) {
+                              const firstType = availableTypes[0];
+                              updateConfiguration(config.id, {
+                                series: value,
+                                name: firstType.name,
+                                vCpus: firstType.vCpus,
+                                memoryGB: firstType.memoryGB,
+                                description: firstType.description,
+                                cpuPlatform: firstType.cpuPlatform,
+                                onDemandPerHour: firstType.onDemandPerHour,
+                                cudOneYearPerHour:
+                                  firstType.cudOneYearPerHour,
+                                cudThreeYearPerHour:
+                                  firstType.cudThreeYearPerHour,
+                                spotPerHour: firstType.spotPerHour,
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MACHINE_SERIES.map((series) => (
+                              <SelectItem key={series} value={series}>
+                                {series.toUpperCase()}
                               </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
 
-                              {/* Available Machine Types */}
-                              {availableTypes.map((type) => (
-                                <SelectItem key={type.name} value={type.name}>
-                                  <div className="pl-4 text-sm">
-                                    {type.name}
-                                    <span className="text-xs text-muted-foreground ml-2">
-                                      ({type.vCpus}vCPU, {type.memoryGB}GB)
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-
-                              {/* Other Series */}
-                              {MACHINE_SERIES.filter(
-                                (s) => s !== config.series
-                              ).map((series) => (
-                                <SelectItem key={series} value={series}>
-                                  <div className="flex items-center gap-2">
-                                    {seriesSupportsExtendedMemory(series) && (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-xs"
-                                      >
-                                        Ext
-                                      </Badge>
-                                    )}
-                                    {series.toUpperCase()} Series
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                      {/* Machine Type */}
+                      <td className="p-3">
+                        <Select
+                          value={config.name}
+                          onValueChange={(value) => {
+                            const selectedType = availableTypes.find(
+                              (t) => t.name === value
+                            );
+                            if (selectedType) {
+                              updateConfiguration(config.id, {
+                                name: selectedType.name,
+                                vCpus: selectedType.vCpus,
+                                memoryGB: selectedType.memoryGB,
+                                description: selectedType.description,
+                                cpuPlatform: selectedType.cpuPlatform,
+                                onDemandPerHour:
+                                  selectedType.onDemandPerHour,
+                                cudOneYearPerHour:
+                                  selectedType.cudOneYearPerHour,
+                                cudThreeYearPerHour:
+                                  selectedType.cudThreeYearPerHour,
+                                spotPerHour: selectedType.spotPerHour,
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTypes.map((type) => (
+                              <SelectItem key={type.name} value={type.name}>
+                                {type.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </td>
 
                       {/* Family */}
@@ -662,60 +619,48 @@ export default function SpreadsheetCalculator() {
                         )}
                       </td>
 
-                      {/* Disk Type */}
+                      {/* OS */}
                       <td className="p-3">
                         <Select
-                          value={config.diskType}
+                          value={config.os}
                           onValueChange={(value) =>
-                            handleInputChange(config.id, "diskType", value)
+                            handleInputChange(config.id, "os", value)
                           }
                         >
                           <SelectTrigger className="h-8 text-sm">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {DISK_TYPES.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
-                              </SelectItem>
-                            ))}
+                            <SelectItem value="linux">Linux</SelectItem>
+                            <SelectItem value="windows">Windows</SelectItem>
+                            <SelectItem value="rhel">RHEL</SelectItem>
+                            <SelectItem value="rhel_sap">RHEL for SAP</SelectItem>
+                            <SelectItem value="sles">SLES</SelectItem>
+                            <SelectItem value="sles_sap">SLES for SAP</SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
 
-                      {/* Disk Size */}
+                      {/* SQL License */}
                       <td className="p-3">
-                        {editingCell?.configId === config.id &&
-                        editingCell?.field === "diskSize" ? (
-                          <Input
-                            type="number"
-                            value={config.diskSize}
-                            onChange={(e) =>
-                              handleInputChange(
-                                config.id,
-                                "diskSize",
-                                parseInt(e.target.value) || 10
-                              )
-                            }
-                            onBlur={handleCellBlur}
-                            onKeyDown={(e) =>
-                              e.key === "Enter" && handleCellBlur()
-                            }
-                            className="h-8 text-sm"
-                            min="10"
-                            max="65536"
-                            autoFocus
-                          />
-                        ) : (
-                          <button
-                            onClick={() =>
-                              handleCellClick(config.id, "diskSize")
-                            }
-                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
-                          >
-                            {config.diskSize}
-                          </button>
-                        )}
+                        <Select
+                          value={config.sqlLicense}
+                          onValueChange={(value) =>
+                            handleInputChange(config.id, "sqlLicense", value)
+                          }
+                          disabled={config.os !== 'windows'}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            <SelectItem value="enterprise">SQL Server Enterprise</SelectItem>
+                            <SelectItem value="standard">SQL Server Standard</SelectItem>
+                            <SelectItem value="web">SQL Server Web</SelectItem>
+                            <SelectItem value="express">SQL Server Express</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </td>
 
                       {/* On-Demand */}
@@ -739,59 +684,52 @@ export default function SpreadsheetCalculator() {
                         </div>
                       </td>
 
-                      {/* Win or Red-Hat Lics(If Any) */}
+                      {/* OS On-Demand */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.winOrRhelLics)}
+                          {formatCurrency(pricing.osOnDemand)}
                         </div>
                       </td>
 
-                      {/* Red-Hat Lics(CUD 1Yrs) */}
+                      {/* OS 1-Year CUD */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.rhelLics1yCud)}
+                          {formatCurrency(pricing.os1yCud)}
                         </div>
                       </td>
 
-                      {/* Red-Hat Lics(CUD 3Yrs) */}
+                      {/* OS 3-Year CUD */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.rhelLics3yCud)}
+                          {formatCurrency(pricing.os3yCud)}
                         </div>
                       </td>
 
-                      {/* SQL Std. Lics */}
+                      {/* SQL License Cost */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.sqlStdLics)}
+                          {formatCurrency(pricing.sqlLicenseCost)}
                         </div>
                       </td>
 
-                      {/* SQL EE. Lics */}
+                      {/* On-Demand Inclusive */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.sqlEeLics)}
+                          {formatCurrency(pricing.onDemandInclusive)}
                         </div>
                       </td>
 
-                      {/* On-Demand(All inclusive) */}
+                      {/* 1-Year CUD Inclusive */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.onDemandAllInclusive)}
+                          {formatCurrency(pricing.cud1yInclusive)}
                         </div>
                       </td>
 
-                      {/* CUD - 1yr(All inclusive) */}
+                      {/* 3-Year CUD Inclusive */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.cud1yAllInclusive)}
-                        </div>
-                      </td>
-
-                      {/* CUD - 3yr(All inclusive) */}
-                      <td className="p-3">
-                        <div className="text-sm">
-                          {formatCurrency(pricing.cud3yAllInclusive)}
+                          {formatCurrency(pricing.cud3yInclusive)}
                         </div>
                       </td>
 

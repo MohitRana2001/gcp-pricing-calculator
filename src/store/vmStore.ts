@@ -149,9 +149,8 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     spotPerHour: 0.013425,
     runningHours: 730,
     quantity: 1,
-    discountModel: 'On-Demand',
-    diskType: 'Balanced',
-    diskSize: 50,
+    os: 'linux',
+    sqlLicense: 'none',
     ...overrides
   }
   
@@ -197,8 +196,6 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
     memoryGB: ['memory', 'memoryGB', 'ram', 'mem', 'memory_gb'],
     runningHours: ['hours', 'running_hours', 'runtime', 'uptime'],
     quantity: ['quantity', 'count', 'instances', 'num_instances'],
-    diskType: ['disk_type', 'storage_type', 'disk'],
-    diskSize: ['disk_size', 'storage_size', 'disk_gb'],
   }
   
   const mapping: Record<string, string> = {}
@@ -257,12 +254,6 @@ function transformValue(value: string, targetField: string): any {
       if (regionValue.includes('europe') || regionValue.includes('eu')) return 'europe-west1'
       if (regionValue.includes('asia')) return 'asia-southeast1'
       return 'us-central1'
-    
-    case 'diskType':
-      const diskValue = value.toLowerCase()
-      if (diskValue.includes('ssd')) return 'SSD'
-      if (diskValue.includes('balanced')) return 'Balanced'
-      return 'Standard'
     
     default:
       return value
@@ -451,8 +442,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
       'Is Custom',
       'Running Hours',
       'Quantity',
-      'Disk Type',
-      'Disk Size (GB)',
       'On-Demand Per Hour ($)',
       'CUD 1-Year Per Hour ($)',
       'CUD 3-Year Per Hour ($)',
@@ -476,8 +465,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
         config.isCustom,
         config.runningHours,
         config.quantity,
-        config.diskType,
-        config.diskSize,
         config.onDemandPerHour,
         config.cudOneYearPerHour,
         config.cudThreeYearPerHour,

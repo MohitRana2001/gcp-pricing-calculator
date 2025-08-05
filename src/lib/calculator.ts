@@ -7,24 +7,21 @@ export interface VmConfig {
   regionLocation: string // Region (e.g., Mumbai, us-central1)
   vCpus: number
   cpuPlatform: string // CPU Platform (e.g., "AMD Milan, AMD Rome")
-  memoryGB: number;
-  isCustom: boolean; // For custom machine configurations
+  memoryGB: number
+  isCustom: boolean // For custom machine configurations
+  os: string // Operating System
+  sqlLicense: string // SQL License
 
   // Pricing structure (per hour rates)
-  onDemandPerHour: number; // On-demand per hour
-  cudOneYearPerHour: number; // Resource-based CUD - 1 year
+  onDemandPerHour: number // On-demand per hour
+  cudOneYearPerHour: number // Resource-based CUD - 1 year
   cudThreeYearPerHour: number // Resource-based CUD - 3 year
   spotPerHour: number // Per month Spot (converted to hourly)
-  
+
   // Additional configuration
   runningHours: number // Hours per month
   quantity: number // Number of instances
-  discountModel: string // Pricing model selection
-  
-  // Disk configuration
-  diskType: string
-  diskSize: number
-  
+
   // Calculated costs
   estimatedCost: number
   onDemandCost: number
@@ -96,14 +93,7 @@ export const REGIONS = [
   'africa-south1'
 ]
 
-// Disk types and pricing (per GB per month)
-export const DISK_PRICING: Record<string, number> = {
-  'Standard': 0.04,
-  'Balanced': 0.10,
-  'SSD': 0.17,
-}
 
-export const DISK_TYPES = ['Standard', 'Balanced', 'SSD']
 
 // Discount models
 export const DISCOUNT_MODELS = [
@@ -195,14 +185,13 @@ export interface PricingDetails {
   onDemand: number;
   cud1y: number;
   cud3y: number;
-  winOrRhelLics: number;
-  rhelLics1yCud: number;
-  rhelLics3yCud: number;
-  sqlStdLics: number;
-  sqlEeLics: number;
-  onDemandAllInclusive: number;
-  cud1yAllInclusive: number;
-  cud3yAllInclusive: number;
+  osOnDemand: number;
+  os1yCud: number;
+  os3yCud: number;
+  sqlLicenseCost: number;
+  onDemandInclusive: number;
+  cud1yInclusive: number;
+  cud3yInclusive: number;
 }
 
 export function getPricing(config: VmConfig): PricingDetails {
@@ -215,45 +204,83 @@ export function getPricing(config: VmConfig): PricingDetails {
       onDemand: 0,
       cud1y: 0,
       cud3y: 0,
-      winOrRhelLics: 0,
-      rhelLics1yCud: 0,
-      rhelLics3yCud: 0,
-      sqlStdLics: 0,
-      sqlEeLics: 0,
-      onDemandAllInclusive: 0,
-      cud1yAllInclusive: 0,
-      cud3yAllInclusive: 0,
+      osOnDemand: 0,
+      os1yCud: 0,
+      os3yCud: 0,
+      sqlLicenseCost: 0,
+      onDemandInclusive: 0,
+      cud1yInclusive: 0,
+      cud3yInclusive: 0,
     };
   }
 
-  const onDemand = machine.month;
-  const cud1y = machine.month1yCud;
-  const cud3y = machine.month3yCud;
+  const onDemand = (machine.onDemandPerHour || 0) * config.runningHours;
+  const cud1y = machine.month1yCud || 0;
+  const cud3y = machine.month3yCud || 0;
 
-  const winOrRhelLics = machine.monthWindows || machine.monthRhel;
-  const rhelLics1yCud = machine.monthRhel1yCud;
-  const rhelLics3yCud = machine.monthRhel3yCud;
+  let osOnDemand = 0;
+  let os1yCud = 0;
+  let os3yCud = 0;
 
-  const sqlCores = Math.max(4, config.vCpus);
-  const sqlStdLics = 0.1200 * sqlCores * config.runningHours;
-  const sqlEeLics = 0.399 * sqlCores * config.runningHours;
+  switch (config.os) {
+    case 'windows':
+      osOnDemand = machine.monthWindows || 0;
+      os1yCud = machine.monthWindows || 0;
+      os3yCud = machine.monthWindows || 0;
+      break;
+    case 'rhel':
+      osOnDemand = machine.monthRhel || 0;
+      os1yCud = machine.monthRhel1yCud || 0;
+      os3yCud = machine.monthRhel3yCud || 0;
+      break;
+    case 'rhel_sap':
+        osOnDemand = machine.monthRhelSap || 0;
+        os1yCud = machine.monthRhelSap1yCud || 0;
+        os3yCud = machine.monthRhelSap3yCud || 0;
+        break;
+    case 'sles':
+      osOnDemand = machine.monthSles || 0;
+      os1yCud = machine.monthSlesSap1yCud || 0;
+      os3yCud = machine.monthSlesSap3yCud || 0;
+      break;
+    case 'sles_sap':
+        osOnDemand = machine.monthSlesSap || 0;
+        os1yCud = machine.monthSlesSap1yCud || 0;
+        os3yCud = machine.monthSlesSap3yCud || 0;
+        break;
+  }
 
-  const onDemandAllInclusive = onDemand + winOrRhelLics + sqlStdLics;
-  const cud1yAllInclusive = cud1y + rhelLics1yCud + sqlStdLics;
-  const cud3yAllInclusive = cud3y + rhelLics3yCud + sqlStdLics;
+  let sqlLicenseCost = 0;
+  if (config.os === 'windows') {
+    const sqlCores = Math.max(4, config.vCpus);
+    switch (config.sqlLicense) {
+        case 'enterprise':
+            sqlLicenseCost = 0.399 * sqlCores * config.runningHours;
+            break;
+        case 'standard':
+            sqlLicenseCost = 0.1200 * sqlCores * config.runningHours;
+            break;
+        case 'web':
+            sqlLicenseCost = 0.011 * sqlCores * config.runningHours;
+            break;
+    }
+  }
+
+  const onDemandInclusive = onDemand + osOnDemand + sqlLicenseCost;
+  const cud1yInclusive = cud1y + os1yCud + sqlLicenseCost;
+  const cud3yInclusive = cud3y + os3yCud + sqlLicenseCost;
 
   return {
     onDemand,
     cud1y,
     cud3y,
-    winOrRhelLics,
-    rhelLics1yCud,
-    rhelLics3yCud,
-    sqlStdLics,
-    sqlEeLics,
-    onDemandAllInclusive,
-    cud1yAllInclusive,
-    cud3yAllInclusive,
+    osOnDemand,
+    os1yCud,
+    os3yCud,
+    sqlLicenseCost,
+    onDemandInclusive,
+    cud1yInclusive,
+    cud3yInclusive,
   };
 }
 
@@ -298,4 +325,3 @@ export function getMachineTypeSpecs(machineTypeName: string, region: string): Ma
 if (typeof window !== 'undefined') {
   loadMachineTypesData()
 }
- 
