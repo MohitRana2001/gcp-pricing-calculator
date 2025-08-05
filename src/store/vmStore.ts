@@ -80,20 +80,32 @@ function generateId(): string {
 }
 
 // Calculate costs based on configuration
-function calculateCosts(config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>): {
+function calculateCosts(config: any): {
   estimatedCost: number
   onDemandCost: number
   savings: number
 } {
-  const pricing = getPricing(config as VmConfig)
+  // Create a complete config object with defaults for missing optional fields
+  const completeConfig: VmConfig = {
+    ...config,
+    id: config.id || 'temp', // Temporary ID for calculation
+    estimatedCost: 0,
+    onDemandCost: 0,
+    savings: 0,
+    os: config.os || 'linux', // Default to linux if not provided
+    sqlLicense: config.sqlLicense || 'none', // Default to none if not provided
+    discountModel: config.discountModel || 'On-Demand', // Default discount model
+  } as VmConfig
+  
+  const pricing = getPricing(completeConfig)
   
   // Calculate total costs considering quantity and running hours
-  const baseOnDemandMonthly = pricing.onDemand * config.quantity
-  const baseCud1yMonthly = pricing.cud1y * config.quantity
-  const baseCud3yMonthly = pricing.cud3y * config.quantity
+  const baseOnDemandMonthly = pricing.onDemand * (config.quantity || 1)
+  const baseCud1yMonthly = pricing.cud1y * (config.quantity || 1)
+  const baseCud3yMonthly = pricing.cud3y * (config.quantity || 1)
   
   // If running hours is different from 730 (full month), calculate proportionally
-  const hourlyFactor = config.runningHours / 730
+  const hourlyFactor = (config.runningHours || 730) / 730
   
   const onDemandCost = baseOnDemandMonthly * hourlyFactor
   const cud1yCost = baseCud1yMonthly * hourlyFactor
@@ -103,7 +115,8 @@ function calculateCosts(config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDeman
   let savings: number
   
   // Calculate estimated cost based on discount model
-  switch (config.discountModel) {
+  const discountModel = config.discountModel || 'On-Demand'
+  switch (discountModel) {
     case '1-Year CUD':
       estimatedCost = cud1yCost
       savings = onDemandCost - cud1yCost
@@ -114,7 +127,7 @@ function calculateCosts(config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDeman
       break
     case 'Spot VM':
       // Spot pricing is typically much lower - use the spot pricing data if available
-      const spotCost = (config.spotPerHour || 0) * config.runningHours * config.quantity
+      const spotCost = (config.spotPerHour || 0) * (config.runningHours || 730) * (config.quantity || 1)
       estimatedCost = spotCost
       savings = onDemandCost - spotCost
       break
@@ -143,14 +156,15 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     cpuPlatform: 'Intel Cascade Lake',
     memoryGB: 8,
     isCustom: false,
+    os: 'linux', // Default OS
+    sqlLicense: 'none', // Default SQL license
     onDemandPerHour: 0.067123,
     cudOneYearPerHour: 0.043630,
     cudThreeYearPerHour: 0.030205,
     spotPerHour: 0.013425,
     runningHours: 730,
     quantity: 1,
-    os: 'linux',
-    sqlLicense: 'none',
+    discountModel: 'On-Demand',
     ...overrides
   }
   
@@ -196,6 +210,8 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
     memoryGB: ['memory', 'memoryGB', 'ram', 'mem', 'memory_gb'],
     runningHours: ['hours', 'running_hours', 'runtime', 'uptime'],
     quantity: ['quantity', 'count', 'instances', 'num_instances'],
+    os: ['os', 'operating_system', 'system'],
+    sqlLicense: ['sql_license', 'sql', 'license'],
   }
   
   const mapping: Record<string, string> = {}
@@ -229,7 +245,6 @@ function transformValue(value: string, targetField: string): any {
     case 'memoryGB':
     case 'runningHours':
     case 'quantity':
-    case 'diskSize':
       return parseInt(value) || (targetField === 'quantity' ? 1 : 0)
     
     case 'onDemandPerHour':
@@ -254,6 +269,20 @@ function transformValue(value: string, targetField: string): any {
       if (regionValue.includes('europe') || regionValue.includes('eu')) return 'europe-west1'
       if (regionValue.includes('asia')) return 'asia-southeast1'
       return 'us-central1'
+    
+    case 'os':
+      const osValue = value.toLowerCase()
+      if (['windows', 'rhel', 'rhel_sap', 'sles', 'sles_sap'].includes(osValue)) {
+        return osValue
+      }
+      return 'linux'
+    
+    case 'sqlLicense':
+      const sqlValue = value.toLowerCase()
+      if (['standard', 'enterprise', 'web'].includes(sqlValue)) {
+        return sqlValue
+      }
+      return 'none'
     
     default:
       return value
