@@ -106,7 +106,12 @@ export const DISK_PRICING: Record<string, number> = {
 export const DISK_TYPES = ['Standard', 'Balanced', 'SSD']
 
 // Discount models
-
+export const DISCOUNT_MODELS = [
+  'On-Demand',
+  '1-Year CUD', 
+  '3-Year CUD', 
+  'Spot VM'
+]
 
 // Memory configuration for custom instances
 export const MEMORY_CONFIGS: Record<string, { minMemoryPerVcpu: number; maxMemoryPerVcpu: number; supportsExtendedMemory: boolean }> = {

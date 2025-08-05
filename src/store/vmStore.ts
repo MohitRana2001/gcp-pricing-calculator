@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { VmConfig, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupportsExtendedMemory, getAllowedMemoryRange, loadMachineTypesData } from '@/lib/calculator'
+import { VmConfig, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupportsExtendedMemory, getAllowedMemoryRange, loadMachineTypesData, getPricing } from '@/lib/calculator'
 
 export type ServiceType = 'compute-engine' | 'cloud-storage' | 'cloud-sql' | null
 
@@ -79,6 +79,59 @@ function generateId(): string {
   return Math.random().toString(36).substr(2, 9)
 }
 
+// Calculate costs based on configuration
+function calculateCosts(config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>): {
+  estimatedCost: number
+  onDemandCost: number
+  savings: number
+} {
+  const pricing = getPricing(config as VmConfig)
+  
+  // Calculate total costs considering quantity and running hours
+  const baseOnDemandMonthly = pricing.onDemand * config.quantity
+  const baseCud1yMonthly = pricing.cud1y * config.quantity
+  const baseCud3yMonthly = pricing.cud3y * config.quantity
+  
+  // If running hours is different from 730 (full month), calculate proportionally
+  const hourlyFactor = config.runningHours / 730
+  
+  const onDemandCost = baseOnDemandMonthly * hourlyFactor
+  const cud1yCost = baseCud1yMonthly * hourlyFactor
+  const cud3yCost = baseCud3yMonthly * hourlyFactor
+  
+  let estimatedCost: number
+  let savings: number
+  
+  // Calculate estimated cost based on discount model
+  switch (config.discountModel) {
+    case '1-Year CUD':
+      estimatedCost = cud1yCost
+      savings = onDemandCost - cud1yCost
+      break
+    case '3-Year CUD':
+      estimatedCost = cud3yCost
+      savings = onDemandCost - cud3yCost
+      break
+    case 'Spot VM':
+      // Spot pricing is typically much lower - use the spot pricing data if available
+      const spotCost = (config.spotPerHour || 0) * config.runningHours * config.quantity
+      estimatedCost = spotCost
+      savings = onDemandCost - spotCost
+      break
+    case 'On-Demand':
+    default:
+      estimatedCost = onDemandCost
+      savings = 0
+      break
+  }
+  
+  return {
+    estimatedCost: Math.round(estimatedCost * 100) / 100,
+    onDemandCost: Math.round(onDemandCost * 100) / 100,
+    savings: Math.round(Math.max(0, savings) * 100) / 100
+  }
+}
+
 function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'> {
   const defaults = {
     name: 'e2-standard-2',
@@ -96,6 +149,7 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     spotPerHour: 0.013425,
     runningHours: 730,
     quantity: 1,
+    discountModel: 'On-Demand',
     diskType: 'Balanced',
     diskSize: 50,
     ...overrides
@@ -236,12 +290,11 @@ export const useVmStore = create<VmStore>((set, get) => ({
 
   addConfiguration: (config) => {
     const id = generateId()
+    const costs = calculateCosts(config)
     const fullConfig: VmConfig = {
       ...config,
       id,
-      estimatedCost: 0,
-      onDemandCost: 0,
-      savings: 0,
+      ...costs
     }
     
     set((state) => ({
@@ -326,6 +379,12 @@ export const useVmStore = create<VmStore>((set, get) => ({
               }
             }
           }
+          
+          // Recalculate costs after all updates
+          const costs = calculateCosts(updatedConfig)
+          updatedConfig.estimatedCost = costs.estimatedCost
+          updatedConfig.onDemandCost = costs.onDemandCost
+          updatedConfig.savings = costs.savings
           
           return updatedConfig
         }
