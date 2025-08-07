@@ -94,7 +94,7 @@ function calculateCosts(config: any): {
     savings: 0,
     os: config.os || 'linux', // Default to linux if not provided
     sqlLicense: config.sqlLicense || 'none', // Default to none if not provided
-    discountModel: config.discountModel || 'On-Demand', // Default discount model
+    provisioningModel: config.provisioningModel || 'regular',
   } as VmConfig
   
   const pricing = getPricing(completeConfig)
@@ -158,6 +158,7 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     isCustom: false,
     os: 'linux', // Default OS
     sqlLicense: 'none', // Default SQL license
+    provisioningModel: 'regular',
     onDemandPerHour: 0.067123,
     cudOneYearPerHour: 0.043630,
     cudThreeYearPerHour: 0.030205,

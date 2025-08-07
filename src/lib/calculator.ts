@@ -9,20 +9,20 @@ export interface VmConfig {
   cpuPlatform: string // CPU Platform (e.g., "AMD Milan, AMD Rome")
   memoryGB: number
   isCustom: boolean // For custom machine configurations
-  os?: string // Operating System (optional)
-  sqlLicense?: string // SQL License (optional)
+  os: string // Operating System
+  sqlLicense: string // SQL License
+  provisioningModel: string // 'regular' or 'spot'
 
   // Pricing structure (per hour rates)
   onDemandPerHour: number // On-demand per hour
   cudOneYearPerHour: number // Resource-based CUD - 1 year
   cudThreeYearPerHour: number // Resource-based CUD - 3 year
   spotPerHour: number // Per month Spot (converted to hourly)
-  
+
   // Additional configuration
   runningHours: number // Hours per month
   quantity: number // Number of instances
-  discountModel: string // Pricing model selection
-  
+
   // Calculated costs
   estimatedCost: number
   onDemandCost: number
@@ -58,9 +58,6 @@ export interface MachineTypeData {
   monthRhel: number;
   monthRhel1yCud: number;
   monthRhel3yCud: number;
-  monthRhelSap?: number; // Optional - may not exist in all data
-  monthRhelSap1yCud?: number; // Optional - may not exist in all data
-  monthRhelSap3yCud?: number; // Optional - may not exist in all data
   monthWindows: number;
 }
 
@@ -178,9 +175,6 @@ export async function loadMachineTypesData(): Promise<void> {
       monthRhel: item.monthRhel,
       monthRhel1yCud: item.monthRhel1yCud,
       monthRhel3yCud: item.monthRhel3yCud,
-      monthRhelSap: item.monthRhelSap,
-      monthRhelSap1yCud: item.monthRhelSap1yCud,
-      monthRhelSap3yCud: item.monthRhelSap3yCud,
       monthWindows: item.monthWindows,
     }));
   } catch (error) {
@@ -199,6 +193,33 @@ export interface PricingDetails {
   onDemandInclusive: number;
   cud1yInclusive: number;
   cud3yInclusive: number;
+}
+
+function getUbuntuProCost(vCpus: number, memoryGB: number, runningHours: number): number {
+    let vcpuCostPerHour = 0;
+    if (vCpus === 1) vcpuCostPerHour = 0.00166;
+    else if (vCpus === 2) vcpuCostPerHour = 0.002971;
+    else if (vCpus === 4) vcpuCostPerHour = 0.005545;
+    else if (vCpus >= 6 && vCpus <= 8) vcpuCostPerHour = 0.00997;
+    else if (vCpus >= 10 && vCpus <= 16) vcpuCostPerHour = 0.018063;
+    else if (vCpus >= 18 && vCpus <= 48) vcpuCostPerHour = 0.033378;
+    else if (vCpus >= 50 && vCpus <= 78) vcpuCostPerHour = 0.060548;
+    else if (vCpus >= 80 && vCpus <= 96) vcpuCostPerHour = 0.077871;
+    else if (vCpus >= 98 && vCpus <= 222) vcpuCostPerHour = 0.102401;
+    else if (vCpus > 222) vcpuCostPerHour = 0.122063;
+
+    const ramCostPerHour = 0.000127 * memoryGB;
+    const totalHourlyCost = vcpuCostPerHour + ramCostPerHour;
+    return totalHourlyCost * runningHours;
+}
+
+function getRhel7ElsCost(vCpus: number, runningHours: number): number {
+    let vcpuCostPerHour = 0;
+    if (vCpus >= 1 && vCpus <= 8) vcpuCostPerHour = 0.0084;
+    else if (vCpus >= 9 && vCpus <= 127) vcpuCostPerHour = 0.0060;
+    else if (vCpus >= 128) vcpuCostPerHour = 0.0050;
+
+    return vcpuCostPerHour * vCpus * runningHours;
 }
 
 export function getPricing(config: VmConfig): PricingDetails {
@@ -221,91 +242,91 @@ export function getPricing(config: VmConfig): PricingDetails {
     };
   }
 
-  // Safely get base costs with fallbacks to prevent NaN
-  const onDemand = (machine.onDemandPerHour || 0) * (config.runningHours || 730);
-  const cud1y = machine.month1yCud || 0;
-  const cud3y = machine.month3yCud || 0;
+  let onDemand = (Number(machine.onDemandPerHour) || 0) * config.runningHours;
+  let cud1y = Number(machine.month1yCud) || 0;
+  let cud3y = Number(machine.month3yCud) || 0;
+
+  if (config.provisioningModel === 'spot') {
+    onDemand = (Number(machine.spotPerHour) || 0) * config.runningHours;
+    cud1y = 0; // No CUDs for Spot VM compute
+    cud3y = 0; // No CUDs for Spot VM compute
+  }
 
   let osOnDemand = 0;
   let os1yCud = 0;
   let os3yCud = 0;
 
-  // Handle OS costs based on the optional os field
-  const osType = config.os || 'linux'; // Default to Linux if not specified
-  
-  switch (osType.toLowerCase()) {
+  switch (config.os) {
     case 'windows':
-      osOnDemand = machine.monthWindows || 0;
-      os1yCud = machine.monthWindows || 0;
-      os3yCud = machine.monthWindows || 0;
+      osOnDemand = Number(machine.monthWindows) || 0;
+      os1yCud = Number(machine.monthWindows) || 0;
+      os3yCud = Number(machine.monthWindows) || 0;
       break;
     case 'rhel':
-      osOnDemand = machine.monthRhel || 0;
-      os1yCud = machine.monthRhel1yCud || 0;
-      os3yCud = machine.monthRhel3yCud || 0;
+      osOnDemand = Number(machine.monthRhel) || 0;
+      os1yCud = Number(machine.monthRhel1yCud) || 0;
+      os3yCud = Number(machine.monthRhel3yCud) || 0;
       break;
     case 'rhel_sap':
-      osOnDemand = machine.monthRhelSap || 0;
-      os1yCud = machine.monthRhelSap1yCud || 0;
-      os3yCud = machine.monthRhelSap3yCud || 0;
-      break;
+        osOnDemand = Number(machine.monthRhelSap) || 0;
+        os1yCud = Number(machine.monthRhelSap1yCud) || 0;
+        os3yCud = Number(machine.monthRhelSap3yCud) || 0;
+        break;
     case 'sles':
-      osOnDemand = machine.monthSles || 0;
-      os1yCud = machine.monthSlesSap1yCud || 0;
-      os3yCud = machine.monthSlesSap3yCud || 0;
+      osOnDemand = Number(machine.monthSles) || 0;
+      os1yCud = Number(machine.monthSlesSap1yCud) || 0;
+      os3yCud = Number(machine.monthSlesSap3yCud) || 0;
       break;
     case 'sles_sap':
-      osOnDemand = machine.monthSlesSap || 0;
-      os1yCud = machine.monthSlesSap1yCud || 0;
-      os3yCud = machine.monthSlesSap3yCud || 0;
-      break;
-    case 'linux':
-    default:
-      // Linux is typically free, so no additional OS costs
-      osOnDemand = 0;
-      os1yCud = 0;
-      os3yCud = 0;
-      break;
+        osOnDemand = Number(machine.monthSlesSap) || 0;
+        os1yCud = Number(machine.monthSlesSap1yCud) || 0;
+        os3yCud = Number(machine.monthSlesSap3yCud) || 0;
+        break;
+    case 'ubuntu_pro':
+        const ubuntuCost = getUbuntuProCost(config.vCpus, config.memoryGB, config.runningHours);
+        osOnDemand = ubuntuCost;
+        os1yCud = ubuntuCost; // Assuming same price for CUD
+        os3yCud = ubuntuCost; // Assuming same price for CUD
+        break;
+    case 'rhel_7_els':
+        const rhel7ElsCost = getRhel7ElsCost(config.vCpus, config.runningHours);
+        osOnDemand = rhel7ElsCost;
+        os1yCud = rhel7ElsCost; // Assuming same price for CUD
+        os3yCud = rhel7ElsCost; // Assuming same price for CUD
+        break;
   }
 
-  // Handle SQL license costs (only for Windows)
   let sqlLicenseCost = 0;
-  if (osType.toLowerCase() === 'windows' && config.sqlLicense) {
-    const sqlCores = Math.max(4, config.vCpus || 0);
-    const hours = config.runningHours || 730;
-    
-    switch (config.sqlLicense.toLowerCase()) {
-      case 'enterprise':
-        sqlLicenseCost = 0.399 * sqlCores * hours;
-        break;
-      case 'standard':
-        sqlLicenseCost = 0.1200 * sqlCores * hours;
-        break;
-      case 'web':
-        sqlLicenseCost = 0.011 * sqlCores * hours;
-        break;
-      default:
-        sqlLicenseCost = 0;
-        break;
+  if (config.os === 'windows') {
+    const sqlCores = Math.max(4, config.vCpus);
+    switch (config.sqlLicense) {
+        case 'enterprise':
+            sqlLicenseCost = 0.399 * sqlCores * config.runningHours;
+            break;
+        case 'standard':
+            sqlLicenseCost = 0.1200 * sqlCores * config.runningHours;
+            break;
+        case 'web':
+            sqlLicenseCost = 0.011 * sqlCores * config.runningHours;
+            break;
     }
   }
 
-  // Calculate inclusive costs safely
-  const onDemandInclusive = (onDemand || 0) + (osOnDemand || 0) + (sqlLicenseCost || 0);
-  const cud1yInclusive = (cud1y || 0) + (os1yCud || 0) + (sqlLicenseCost || 0);
-  const cud3yInclusive = (cud3y || 0) + (os3yCud || 0) + (sqlLicenseCost || 0);
+  const onDemandInclusive = onDemand + osOnDemand + sqlLicenseCost;
+  const cud1yInclusive = cud1y + os1yCud + sqlLicenseCost;
+  const cud3yInclusive = cud3y + os3yCud + sqlLicenseCost;
 
   return {
-    onDemand: onDemand || 0,
-    cud1y: cud1y || 0,
-    cud3y: cud3y || 0,
-    osOnDemand: osOnDemand || 0,
-    os1yCud: os1yCud || 0,
-    os3yCud: os3yCud || 0,
-    sqlLicenseCost: sqlLicenseCost || 0,
-    onDemandInclusive: onDemandInclusive || 0,
-    cud1yInclusive: cud1yInclusive || 0,
-    cud3yInclusive: cud3yInclusive || 0,
+    onDemand,
+    cud1y,
+    cud3y,
+    osOnDemand,
+    os1yCud,
+    os3yCud,
+    sqlLicenseCost,
+    onDemandInclusive,
+    cud1yInclusive,
+    cud3yInclusive,
   };
 }
 

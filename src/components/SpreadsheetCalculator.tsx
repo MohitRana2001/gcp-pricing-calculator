@@ -298,7 +298,7 @@ export default function SpreadsheetCalculator() {
                     config.regionLocation
                   );
                   const pricing = getPricing(config);
-
+                  console.log({"checking onDemand:" : formatCurrency(pricing.onDemandInclusive)}, {"checking onDemand:" : pricing.cud1yInclusive},{"checking onDemand:" : pricing.cud3yInclusive});
                   return (
                     <motion.tr
                       key={config.id}
@@ -637,6 +637,8 @@ export default function SpreadsheetCalculator() {
                             <SelectItem value="rhel_sap">RHEL for SAP</SelectItem>
                             <SelectItem value="sles">SLES</SelectItem>
                             <SelectItem value="sles_sap">SLES for SAP</SelectItem>
+                            <SelectItem value="ubuntu_pro">Ubuntu Pro</SelectItem>
+                            <SelectItem value="rhel_7_els">RHEL 7 ELS add-on</SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
@@ -722,14 +724,14 @@ export default function SpreadsheetCalculator() {
                       {/* 1-Year CUD Inclusive */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.cud1yInclusive)}
+                          {formatCurrency(Number(pricing.cud1yInclusive))}
                         </div>
                       </td>
 
                       {/* 3-Year CUD Inclusive */}
                       <td className="p-3">
                         <div className="text-sm">
-                          {formatCurrency(pricing.cud3yInclusive)}
+                          {formatCurrency(Number(pricing.cud3yInclusive))}
                         </div>
                       </td>
 
