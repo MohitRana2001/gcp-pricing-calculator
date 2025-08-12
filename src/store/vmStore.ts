@@ -114,8 +114,9 @@ function calculateCosts(config: any): {
   let estimatedCost: number
   let savings: number
   
-  // Calculate estimated cost based on discount model
+  // Calculate estimated cost based on discount model and provisioning model
   const discountModel = config.discountModel || 'On-Demand'
+  const provisioningModel = config.provisioningModel || (discountModel === 'Spot VM' ? 'spot' : 'regular')
   switch (discountModel) {
     case '1-Year CUD':
       estimatedCost = cud1yCost
@@ -125,16 +126,17 @@ function calculateCosts(config: any): {
       estimatedCost = cud3yCost
       savings = onDemandCost - cud3yCost
       break
-    case 'Spot VM':
-      // Spot pricing is typically much lower - use the spot pricing data if available
-      const spotCost = (config.spotPerHour || 0) * (config.runningHours || 730) * (config.quantity || 1)
-      estimatedCost = spotCost
-      savings = onDemandCost - spotCost
-      break
     case 'On-Demand':
     default:
-      estimatedCost = onDemandCost
-      savings = 0
+      if (provisioningModel === 'spot') {
+        // Spot uses spotPerHour from data
+        const spotCost = (config.spotPerHour || 0) * (config.runningHours || 730) * (config.quantity || 1)
+        estimatedCost = spotCost
+        savings = onDemandCost - spotCost
+      } else {
+        estimatedCost = onDemandCost
+        savings = 0
+      }
       break
   }
   
@@ -472,6 +474,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
       'Is Custom',
       'Running Hours',
       'Quantity',
+      'Provisioning Model',
       'On-Demand Per Hour ($)',
       'CUD 1-Year Per Hour ($)',
       'CUD 3-Year Per Hour ($)',
@@ -495,6 +498,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
         config.isCustom,
         config.runningHours,
         config.quantity,
+        config.provisioningModel || (config.provisioningModel === 'spot' ? 'spot' : 'regular'),
         config.onDemandPerHour,
         config.cudOneYearPerHour,
         config.cudThreeYearPerHour,

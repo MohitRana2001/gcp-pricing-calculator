@@ -22,7 +22,6 @@ export interface VmConfig {
   // Additional configuration
   runningHours: number // Hours per month
   quantity: number // Number of instances
-
   // Calculated costs
   estimatedCost: number
   onDemandCost: number
@@ -96,13 +95,21 @@ export const REGIONS = [
 
 
 
-// Discount models
+// Discount models with enhanced provisioning options
 export const DISCOUNT_MODELS = [
   'On-Demand',
   '1-Year CUD', 
   '3-Year CUD', 
   'Spot VM'
 ]
+
+// Provisioning models (separate from discount models)
+export const PROVISIONING_MODELS = [
+  'Regular',
+  'Spot'
+] as const
+
+export type ProvisioningModel = typeof PROVISIONING_MODELS[number]
 
 // Memory configuration for custom instances
 export const MEMORY_CONFIGS: Record<string, { minMemoryPerVcpu: number; maxMemoryPerVcpu: number; supportsExtendedMemory: boolean }> = {
@@ -175,6 +182,9 @@ export async function loadMachineTypesData(): Promise<void> {
       monthRhel: item.monthRhel,
       monthRhel1yCud: item.monthRhel1yCud,
       monthRhel3yCud: item.monthRhel3yCud,
+      monthRhelSap: item.monthRhelSap,
+      monthRhelSap1yCud: item.monthRhelSap1yCud,
+      monthRhelSap3yCud: item.monthRhelSap3yCud,
       monthWindows: item.monthWindows,
     }));
   } catch (error) {
@@ -268,9 +278,9 @@ export function getPricing(config: VmConfig): PricingDetails {
       os3yCud = Number(machine.monthRhel3yCud) || 0;
       break;
     case 'rhel_sap':
-        osOnDemand = Number(machine.monthRhelSap) || 0;
-        os1yCud = Number(machine.monthRhelSap1yCud) || 0;
-        os3yCud = Number(machine.monthRhelSap3yCud) || 0;
+        osOnDemand = Number(machine?.monthRhelSap) || 0;
+        os1yCud = Number(machine?.monthRhelSap1yCud) || 0;
+        os3yCud = Number(machine?.monthRhelSap3yCud) || 0;
         break;
     case 'sles':
       osOnDemand = Number(machine.monthSles) || 0;

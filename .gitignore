@@ -21,6 +21,9 @@
 /automation-traces
 /automation-videos
 
+# Playwright automation artifacts (entire folder ignored)
+/artifacts/
+
 # misc
 .DS_Store
 *.pem

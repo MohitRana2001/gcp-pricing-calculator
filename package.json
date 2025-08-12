@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:automation": "node -e \"import('./src/lib/gcpUrlGenerator.js').then(m => m.testAutomation())\"",
+    "setup:playwright": "npx playwright install"
   },
   "dependencies": {
     "@playwright/test": "^1.54.2",

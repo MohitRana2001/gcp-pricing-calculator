@@ -83,6 +83,7 @@ export default function SpreadsheetCalculator() {
       quantity: 1,
       os: "linux",
       sqlLicense: "none",
+      provisioningModel: "regular",
     });
   };
 
@@ -251,6 +252,9 @@ export default function SpreadsheetCalculator() {
                   Quantity
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
+                  Provisioning
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
                   OS
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
@@ -298,7 +302,15 @@ export default function SpreadsheetCalculator() {
                     config.regionLocation
                   );
                   const pricing = getPricing(config);
-                  console.log({"checking onDemand:" : formatCurrency(pricing.onDemandInclusive)}, {"checking onDemand:" : pricing.cud1yInclusive},{"checking onDemand:" : pricing.cud3yInclusive});
+                  console.log(
+                    {
+                      "checking onDemand:": formatCurrency(
+                        pricing.onDemandInclusive
+                      ),
+                    },
+                    { "checking onDemand:": pricing.cud1yInclusive },
+                    { "checking onDemand:": pricing.cud3yInclusive }
+                  );
                   return (
                     <motion.tr
                       key={config.id}
@@ -340,8 +352,7 @@ export default function SpreadsheetCalculator() {
                                 description: firstType.description,
                                 cpuPlatform: firstType.cpuPlatform,
                                 onDemandPerHour: firstType.onDemandPerHour,
-                                cudOneYearPerHour:
-                                  firstType.cudOneYearPerHour,
+                                cudOneYearPerHour: firstType.cudOneYearPerHour,
                                 cudThreeYearPerHour:
                                   firstType.cudThreeYearPerHour,
                                 spotPerHour: firstType.spotPerHour,
@@ -377,8 +388,7 @@ export default function SpreadsheetCalculator() {
                                 memoryGB: selectedType.memoryGB,
                                 description: selectedType.description,
                                 cpuPlatform: selectedType.cpuPlatform,
-                                onDemandPerHour:
-                                  selectedType.onDemandPerHour,
+                                onDemandPerHour: selectedType.onDemandPerHour,
                                 cudOneYearPerHour:
                                   selectedType.cudOneYearPerHour,
                                 cudThreeYearPerHour:
@@ -619,6 +629,31 @@ export default function SpreadsheetCalculator() {
                         )}
                       </td>
 
+                      {/* Provisioning */}
+                      <td className="p-3">
+                        <Select
+                          value={
+                            config.provisioningModel ||
+                            (config.provisioningModel === "spot"
+                              ? "spot"
+                              : "regular")
+                          }
+                          onValueChange={(value) => {
+                            updateConfiguration(config.id, {
+                              provisioningModel: value as any,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="regular">Regular</SelectItem>
+                            <SelectItem value="spot">Spot</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+
                       {/* OS */}
                       <td className="p-3">
                         <Select
@@ -634,11 +669,19 @@ export default function SpreadsheetCalculator() {
                             <SelectItem value="linux">Linux</SelectItem>
                             <SelectItem value="windows">Windows</SelectItem>
                             <SelectItem value="rhel">RHEL</SelectItem>
-                            <SelectItem value="rhel_sap">RHEL for SAP</SelectItem>
+                            <SelectItem value="rhel_sap">
+                              RHEL for SAP
+                            </SelectItem>
                             <SelectItem value="sles">SLES</SelectItem>
-                            <SelectItem value="sles_sap">SLES for SAP</SelectItem>
-                            <SelectItem value="ubuntu_pro">Ubuntu Pro</SelectItem>
-                            <SelectItem value="rhel_7_els">RHEL 7 ELS add-on</SelectItem>
+                            <SelectItem value="sles_sap">
+                              SLES for SAP
+                            </SelectItem>
+                            <SelectItem value="ubuntu_pro">
+                              Ubuntu Pro
+                            </SelectItem>
+                            <SelectItem value="rhel_7_els">
+                              RHEL 7 ELS add-on
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
@@ -650,17 +693,23 @@ export default function SpreadsheetCalculator() {
                           onValueChange={(value) =>
                             handleInputChange(config.id, "sqlLicense", value)
                           }
-                          disabled={config.os !== 'windows'}
+                          disabled={config.os !== "windows"}
                         >
                           <SelectTrigger className="h-8 text-sm">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">None</SelectItem>
-                            <SelectItem value="enterprise">SQL Server Enterprise</SelectItem>
-                            <SelectItem value="standard">SQL Server Standard</SelectItem>
+                            <SelectItem value="enterprise">
+                              SQL Server Enterprise
+                            </SelectItem>
+                            <SelectItem value="standard">
+                              SQL Server Standard
+                            </SelectItem>
                             <SelectItem value="web">SQL Server Web</SelectItem>
-                            <SelectItem value="express">SQL Server Express</SelectItem>
+                            <SelectItem value="express">
+                              SQL Server Express
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </td>

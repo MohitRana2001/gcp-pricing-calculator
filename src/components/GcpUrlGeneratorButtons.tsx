@@ -57,9 +57,20 @@ export default function GcpUrlGeneratorButtons({
   const handleOpenUrl = async () => {
     if (generatedUrl) {
       window.open(generatedUrl, "_blank");
-    } else {
-      await handleGenerateUrl();
-      // URL will be opened after generation completes if successful
+      return;
+    }
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const url = await generateBulkUrl(configurations);
+      setGeneratedUrl(url);
+      window.open(url, "_blank");
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to generate URL";
+      setError(errorMessage);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
