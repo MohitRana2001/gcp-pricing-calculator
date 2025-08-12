@@ -54,6 +54,9 @@ export interface MachineTypeData {
   monthSlesSap: number;
   monthSlesSap1yCud: number;
   monthSlesSap3yCud: number;
+  monthRhelSap: number;
+  monthRhelSap1yCud: number;
+  monthRhelSap3yCud: number;
   monthRhel: number;
   monthRhel1yCud: number;
   monthRhel3yCud: number;
