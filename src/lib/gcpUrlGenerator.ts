@@ -392,7 +392,7 @@ export function getMockVmConfigs(): VmConfig[] {
       spotPerHour: 0.013425,
       runningHours: 730,
       quantity: 1,
-      discountModel: 'On-Demand',
+      provisioningModel: 'regular',
       estimatedCost: 49,
       onDemandCost: 49,
       savings: 0,
