@@ -146,7 +146,7 @@ export function vmConfigToInstanceInput(config: VmConfig): InstanceInput {
     series: mapMachineSeries(config.series),
     machineType: config.name, // e.g., e2-standard-4
     region: mapRegion(config.regionLocation),
-    committedUse: mapDiscountModelToCommittedUse(config.discountModel),
+    committedUse: mapDiscountModelToCommittedUse(config.provisioningModel),
   };
 }
 
@@ -189,7 +189,7 @@ export function validateVmConfigForAutomation(config: VmConfig): string[] {
     errors.push('Region location is required');
   }
 
-  if (!config.discountModel || config.discountModel.trim() === '') {
+  if (!config.provisioningModel || config.provisioningModel.trim() === '') {
     errors.push('Discount model is required');
   }
 
@@ -253,7 +253,7 @@ export function createTestVmConfig(): VmConfig {
     spotPerHour: 0.013425,
     runningHours: 730,
     quantity: 1,
-    discountModel: 'On-Demand',
+    provisioningModel: 'regular',
     estimatedCost: 49,
     onDemandCost: 49,
     savings: 0,
