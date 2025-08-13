@@ -264,10 +264,10 @@ export default function SpreadsheetCalculator() {
                   On-Demand
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  CUD - 1yr
+                  RCUD - 1yr
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  CUD - 3yr
+                  RCUD - 3yr
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
                   OS On-Demand

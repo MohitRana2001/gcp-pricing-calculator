@@ -405,7 +405,7 @@ export default function QuickActions() {
       )} */}
 
       {/* GCP Calculator Integration - Only show when Compute Engine is selected */}
-      {selectedService === "compute-engine" && configurations.length > 0 && (
+      {/* {selectedService === "compute-engine" && configurations.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -429,7 +429,6 @@ export default function QuickActions() {
               <div>• Process may take 10-30 seconds per configuration</div>
             </div>
 
-            {/* Development/Research Tools */}
             {process.env.NODE_ENV === "development" && (
               <div className="border-t pt-3 space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">
@@ -462,7 +461,7 @@ export default function QuickActions() {
             )}
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Multi-Cloud Comparison */}
       <Card>

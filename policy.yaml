@@ -1,0 +1,4 @@
+constraint: constraints/compute.vmExternalIpAccess
+listPolicy:
+  allowedValues:
+  - projects/ps-apprentice/zones/asia-south1-a/instances/gcp-calc-demo-vm
