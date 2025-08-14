@@ -26,11 +26,9 @@ interface CloudSQLConfig {
 }
 
 interface VmStore {
-  // Service selection
   selectedService: ServiceType
   setSelectedService: (service: ServiceType) => void
   
-  // Compute Engine
   configurations: VmConfig[]
   selectedIds: Set<string>
   dataLoaded: boolean
@@ -41,7 +39,6 @@ interface VmStore {
   // Cloud SQL (placeholder for future)
   sqlConfigurations: CloudSQLConfig[]
   
-  // Configuration management
   addConfiguration: (config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>) => void
   removeConfiguration: (id: string) => void
   removeMultipleConfigurations: (ids: string[]) => void
@@ -49,26 +46,21 @@ interface VmStore {
   duplicateConfiguration: (id: string) => void
   duplicateMultipleConfigurations: (ids: string[]) => void
   
-  // Selection management
   toggleSelection: (id: string) => void
   selectAll: () => void
   clearSelection: () => void
   
-  // CSV operations with AI intelligence
   exportToCSV: () => void
   importFromCSV: (csvData: string) => Promise<void>
   intelligentCSVMapping: (csvData: string) => Promise<any[]>
   
-  // Data loading
   initializeData: () => Promise<void>
   
-  // Statistics
   getTotalConfigurations: () => number
   getAverageCost: () => number
   getTotalSavings: () => number
   getTotalMonthlyCost: () => number
   
-  // Service-specific statistics
   getComputeEngineCost: () => number
   getCloudStorageCost: () => number
   getCloudSQLCost: () => number
@@ -79,7 +71,6 @@ function generateId(): string {
   return Math.random().toString(36).substr(2, 9)
 }
 
-// Calculate costs based on configuration
 function calculateCosts(config: any): {
   estimatedCost: number
   onDemandCost: number
@@ -293,7 +284,6 @@ function transformValue(value: string, targetField: string): any {
 }
 
 export const useVmStore = create<VmStore>((set, get) => ({
-  // Service selection
   selectedService: null,
   setSelectedService: (service: ServiceType) => set({ selectedService: service }),
   
@@ -345,10 +335,8 @@ export const useVmStore = create<VmStore>((set, get) => ({
         if (config.id === id) {
           const updatedConfig = { ...config, ...updates }
           
-          // Handle custom memory validation
           if (updates.isCustom !== undefined) {
             if (updates.isCustom === false) {
-              // Switching from custom to predefined - load machine type data
               const machineSpec = getMachineTypeSpecs(updatedConfig.name, updatedConfig.regionLocation)
               if (machineSpec) {
                 updatedConfig.vCpus = machineSpec.vCpus
@@ -361,7 +349,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
             }
           }
           
-          // Handle series change
           if (updates.series && updates.series !== config.series) {
             const availableTypes = getAvailableMachineTypes(updates.series, updatedConfig.regionLocation)
             if (availableTypes.length > 0 && !updatedConfig.isCustom) {
@@ -403,7 +390,6 @@ export const useVmStore = create<VmStore>((set, get) => ({
             }
           }
           
-          // Recalculate costs after all updates
           const costs = calculateCosts(updatedConfig)
           updatedConfig.estimatedCost = costs.estimatedCost
           updatedConfig.onDemandCost = costs.onDemandCost
