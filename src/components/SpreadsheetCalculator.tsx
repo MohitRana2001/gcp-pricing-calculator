@@ -218,32 +218,30 @@ export default function SpreadsheetCalculator() {
                     }
                   />
                 </th>
+                <th className="w-24 p-3 text-left font-semibold">Actions</th>
+                <th className="min-w-[140px] p-3 text-left font-semibold">
+                  Region Location
+                </th>
                 <th className="min-w-[100px] p-3 text-left font-semibold">
                   Series
+                </th>
+                <th className="min-w-[80px] p-3 text-left font-semibold">
+                  Custom
                 </th>
                 <th className="min-w-[200px] p-3 text-left font-semibold">
                   Machine Type
                 </th>
-                <th className="min-w-[140px] p-3 text-left font-semibold">
-                  Family
-                </th>
-                <th className="min-w-[200px] p-3 text-left font-semibold">
-                  Description
-                </th>
-                <th className="min-w-[140px] p-3 text-left font-semibold">
-                  Region Location
-                </th>
                 <th className="min-w-[80px] p-3 text-left font-semibold">
                   vCPUs
-                </th>
-                <th className="min-w-[160px] p-3 text-left font-semibold">
-                  CPU Platform
                 </th>
                 <th className="min-w-[120px] p-3 text-left font-semibold">
                   Memory (GB)
                 </th>
-                <th className="min-w-[80px] p-3 text-left font-semibold">
-                  Custom
+                <th className="min-w-[200px] p-3 text-left font-semibold">
+                  Description
+                </th>
+                <th className="min-w-[160px] p-3 text-left font-semibold">
+                  CPU Platform
                 </th>
                 <th className="min-w-[130px] p-3 text-left font-semibold">
                   Running Hours
@@ -252,13 +250,13 @@ export default function SpreadsheetCalculator() {
                   Quantity
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
-                  Provisioning
-                </th>
-                <th className="min-w-[150px] p-3 text-left font-semibold">
                   OS
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
                   SQL License
+                </th>
+                <th className="min-w-[150px] p-3 text-left font-semibold">
+                  Provisioning
                 </th>
                 <th className="min-w-[150px] p-3 text-left font-semibold">
                   On-Demand
@@ -290,7 +288,6 @@ export default function SpreadsheetCalculator() {
                 <th className="min-w-[150px] p-3 text-left font-semibold">
                   3-Year CUD Inclusive
                 </th>
-                <th className="w-24 p-3 text-left font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -318,9 +315,8 @@ export default function SpreadsheetCalculator() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className={`border-t hover:bg-muted/25 transition-colors ${
-                        selectedIds.has(config.id) ? "bg-muted/50" : ""
-                      }`}
+                      className={`border-t hover:bg-muted/25 transition-colors ${selectedIds.has(config.id) ? "bg-muted/50" : ""
+                        }`}
                       onMouseEnter={() => setHoveredRow(config.id)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
@@ -330,6 +326,82 @@ export default function SpreadsheetCalculator() {
                           checked={selectedIds.has(config.id)}
                           onCheckedChange={() => toggleSelection(config.id)}
                         />
+                      </td>
+
+                      {/* Actions */}
+                      <td className="p-3">
+                        <div
+                          className={`flex gap-1 transition-opacity`}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => duplicateConfiguration(config.id)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => removeConfiguration(config.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={async () => {
+                              try {
+                                const { generateGcpCalculatorUrl } =
+                                  await import("@/lib/gcpUrlGenerator");
+                                const url = await generateGcpCalculatorUrl([
+                                  config,
+                                ]);
+                                window.open(url, "_blank");
+                              } catch (error) {
+                                console.error(
+                                  "Failed to generate GCP URL:",
+                                  error
+                                );
+                                // Fallback to opening the calculator manually
+                                window.open(
+                                  "https://cloud.google.com/products/calculator",
+                                  "_blank"
+                                );
+                              }
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+
+                      {/* Region Location */}
+                      <td className="p-3">
+                        <Select
+                          value={config.regionLocation}
+                          onValueChange={(value) =>
+                            handleInputChange(
+                              config.id,
+                              "regionLocation",
+                              value
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {REGIONS.map((region) => (
+                              <SelectItem key={region} value={region}>
+                                {region}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </td>
 
                       {/* Series */}
@@ -373,6 +445,16 @@ export default function SpreadsheetCalculator() {
                         </Select>
                       </td>
 
+                      {/* Custom Toggle */}
+                      <td className="p-3 text-center">
+                        <Checkbox
+                          checked={config.isCustom}
+                          onCheckedChange={(checked) =>
+                            handleInputChange(config.id, "isCustom", checked)
+                          }
+                        />
+                      </td>
+
                       {/* Machine Type */}
                       <td className="p-3">
                         <Select
@@ -411,47 +493,10 @@ export default function SpreadsheetCalculator() {
                         </Select>
                       </td>
 
-                      {/* Family */}
-                      <td className="p-3">
-                        <div className="text-sm">{config.family}</div>
-                      </td>
-
-                      {/* Description */}
-                      <td className="p-3">
-                        <div className="text-sm text-muted-foreground">
-                          {config.description}
-                        </div>
-                      </td>
-
-                      {/* Region Location */}
-                      <td className="p-3">
-                        <Select
-                          value={config.regionLocation}
-                          onValueChange={(value) =>
-                            handleInputChange(
-                              config.id,
-                              "regionLocation",
-                              value
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {REGIONS.map((region) => (
-                              <SelectItem key={region} value={region}>
-                                {region}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-
                       {/* vCPUs */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "vCpus" ? (
+                          editingCell?.field === "vCpus" ? (
                           <Input
                             type="number"
                             value={config.vCpus}
@@ -482,17 +527,10 @@ export default function SpreadsheetCalculator() {
                         )}
                       </td>
 
-                      {/* CPU Platform */}
-                      <td className="p-3">
-                        <div className="text-xs text-muted-foreground">
-                          {config.cpuPlatform}
-                        </div>
-                      </td>
-
                       {/* Memory (GB) */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "memoryGB" ? (
+                          editingCell?.field === "memoryGB" ? (
                           <div>
                             <Input
                               type="number"
@@ -508,11 +546,10 @@ export default function SpreadsheetCalculator() {
                               onKeyDown={(e) =>
                                 e.key === "Enter" && handleCellBlur()
                               }
-                              className={`h-8 text-sm ${
-                                memoryInfo && !memoryInfo.isValid
+                              className={`h-8 text-sm ${memoryInfo && !memoryInfo.isValid
                                   ? "border-red-500"
                                   : ""
-                              }`}
+                                }`}
                               min={memoryInfo?.min || 1}
                               max={memoryInfo?.max || 384}
                               step="0.25"
@@ -549,20 +586,24 @@ export default function SpreadsheetCalculator() {
                         )}
                       </td>
 
-                      {/* Custom Toggle */}
+                      {/* Description */}
                       <td className="p-3">
-                        <Checkbox
-                          checked={config.isCustom}
-                          onCheckedChange={(checked) =>
-                            handleInputChange(config.id, "isCustom", checked)
-                          }
-                        />
+                        <div className="text-sm text-muted-foreground">
+                          {config.description}
+                        </div>
+                      </td>
+
+                      {/* CPU Platform */}
+                      <td className="p-3">
+                        <div className="text-xs text-muted-foreground">
+                          {config.cpuPlatform}
+                        </div>
                       </td>
 
                       {/* Running Hours */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "runningHours" ? (
+                          editingCell?.field === "runningHours" ? (
                           <Input
                             type="number"
                             value={config.runningHours}
@@ -597,7 +638,7 @@ export default function SpreadsheetCalculator() {
                       {/* Quantity */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "quantity" ? (
+                          editingCell?.field === "quantity" ? (
                           <Input
                             type="number"
                             value={config.quantity}
@@ -627,31 +668,6 @@ export default function SpreadsheetCalculator() {
                             {config.quantity}
                           </button>
                         )}
-                      </td>
-
-                      {/* Provisioning */}
-                      <td className="p-3">
-                        <Select
-                          value={
-                            config.provisioningModel ||
-                            (config.provisioningModel === "spot"
-                              ? "spot"
-                              : "regular")
-                          }
-                          onValueChange={(value) => {
-                            updateConfiguration(config.id, {
-                              provisioningModel: value as any,
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="regular">Regular</SelectItem>
-                            <SelectItem value="spot">Spot</SelectItem>
-                          </SelectContent>
-                        </Select>
                       </td>
 
                       {/* OS */}
@@ -710,6 +726,31 @@ export default function SpreadsheetCalculator() {
                             <SelectItem value="express">
                               SQL Server Express
                             </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+
+                      {/* Provisioning */}
+                      <td className="p-3">
+                        <Select
+                          value={
+                            config.provisioningModel ||
+                            (config.provisioningModel === "spot"
+                              ? "spot"
+                              : "regular")
+                          }
+                          onValueChange={(value) => {
+                            updateConfiguration(config.id, {
+                              provisioningModel: value as any,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="regular">Regular</SelectItem>
+                            <SelectItem value="spot">Spot</SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
@@ -781,61 +822,6 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <div className="text-sm">
                           {formatCurrency(Number(pricing.cud3yInclusive))}
-                        </div>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="p-3">
-                        <div
-                          className={`flex gap-1 transition-opacity ${
-                            hoveredRow === config.id
-                              ? "opacity-100"
-                              : "opacity-0"
-                          }`}
-                        >
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => duplicateConfiguration(config.id)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => removeConfiguration(config.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={async () => {
-                              try {
-                                const { generateGcpCalculatorUrl } =
-                                  await import("@/lib/gcpUrlGenerator");
-                                const url = await generateGcpCalculatorUrl([
-                                  config,
-                                ]);
-                                window.open(url, "_blank");
-                              } catch (error) {
-                                console.error(
-                                  "Failed to generate GCP URL:",
-                                  error
-                                );
-                                // Fallback to opening the calculator manually
-                                window.open(
-                                  "https://cloud.google.com/products/calculator",
-                                  "_blank"
-                                );
-                              }
-                            }}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
                         </div>
                       </td>
                     </motion.tr>
