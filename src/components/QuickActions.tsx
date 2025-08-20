@@ -193,7 +193,7 @@ export default function QuickActions() {
       </Card>
 
       {/* Cost Summary */}
-      {getTotalServicesCost() > 0 && (
+      {/* {getTotalServicesCost() > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -249,7 +249,7 @@ export default function QuickActions() {
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Bulk Actions - Only show when Compute Engine is selected and has configurations */}
       {selectedService === "compute-engine" && configurations.length > 0 && (
