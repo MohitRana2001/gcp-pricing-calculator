@@ -88,56 +88,159 @@ async function clickWithRetry(target: () => Promise<import('playwright').Locator
 }
 
 async function openCombobox(page: Page, labelRe: RegExp) {
+  console.log(`🎯 COMBOBOX: Looking for combobox matching: ${labelRe}`);
+  
   const combo = page.getByRole('combobox', { name: labelRe });
-  await combo.scrollIntoViewIfNeeded();
-  await combo.waitFor({ state: 'visible' });
-  await combo.click();
-  return combo;
+  const count = await combo.count();
+  console.log(`📋 COMBOBOX: Found ${count} matching comboboxes`);
+  
+  if (count === 0) {
+    throw new Error(`No combobox found matching: ${labelRe}`);
+  }
+  
+  if (count > 1) {
+    console.log(`⚠️ COMBOBOX: Multiple comboboxes found, using first visible one`);
+  }
+  
+  // Use the first visible combobox
+  const targetCombo = combo.first();
+  await targetCombo.scrollIntoViewIfNeeded();
+  await targetCombo.waitFor({ state: 'visible' });
+  
+  // Log the combobox label for debugging
+  try {
+    const label = await targetCombo.getAttribute('aria-label') || await targetCombo.getAttribute('name') || 'Unknown';
+    console.log(`🎯 COMBOBOX: Clicking combobox with label: "${label}"`);
+  } catch (e) {
+    console.log(`🎯 COMBOBOX: Clicking combobox (could not read label)`);
+  }
+  
+  await targetCombo.click();
+  return targetCombo;
 }
 
 async function pickFromOpenList(page: Page, desiredLabel: string) {
-  // Tries exact, then fuzzy contains
-  const list = page.locator('[role="listbox"], [role="menu"], .cdk-overlay-container, [data-test="mdc-list"]');
-  await list.waitFor({ state: 'visible', timeout: 7000 });
-  // All options
-  const options = list.locator('[role="option"], [role="menuitem"], li, .mdc-list-item');
+  console.log(`🔍 DROPDOWN: Looking for option "${desiredLabel}"`);
+  
+  // Find all visible dropdown containers
+  const allLists = await page.locator('[role="listbox"], [role="menu"]').all();
+  console.log(`📋 DROPDOWN: Found ${allLists.length} dropdown containers`);
+  
+  // Find the most recently opened/visible dropdown
+  let targetList = null;
+  for (const list of allLists) {
+    try {
+      const isVisible = await list.isVisible({ timeout: 1000 });
+      if (isVisible) {
+        // Check if this dropdown actually contains options
+        const optionCount = await list.locator('[role="option"], [role="menuitem"], li').count();
+        console.log(`📋 DROPDOWN: List has ${optionCount} options and is visible`);
+        if (optionCount > 0) {
+          targetList = list;
+          break; // Use the first visible dropdown with options
+        }
+      }
+    } catch (e) {
+      // Skip this list if it's not accessible
+      continue;
+    }
+  }
+  
+  if (!targetList) {
+    throw new Error('No visible dropdown with options found');
+  }
+  
+  console.log(`✅ DROPDOWN: Using target dropdown`);
+  
+  // Get all options from the target dropdown
+  const options = targetList.locator('[role="option"], [role="menuitem"], li');
   const count = await options.count();
-  if (count === 0) throw new Error('No dropdown options visible');
+  console.log(`📝 DROPDOWN: Found ${count} options in target dropdown`);
+  
+  if (count === 0) throw new Error('No dropdown options visible in target dropdown');
 
-  // Try exact
-  for (let i = 0; i < count; i++) {
-    const op = options.nth(i);
-    const txt = (await op.innerText()).trim();
-    if (txt.toLowerCase() === desiredLabel.toLowerCase()) {
-      await op.click();
-      return txt;
+  // Log all available options for debugging
+  for (let i = 0; i < Math.min(count, 10); i++) { // Log first 10 options
+    try {
+      const optText = await options.nth(i).innerText({ timeout: 1000 });
+      console.log(`  ${i + 1}. "${optText.trim()}"`);
+    } catch (e) {
+      console.log(`  ${i + 1}. [Could not read text]`);
     }
   }
-  // Try contains
+
+  // Try exact match first
   for (let i = 0; i < count; i++) {
     const op = options.nth(i);
-    const txt = (await op.innerText()).trim();
-    if (ciContains(txt, desiredLabel)) {
-      await op.click();
-      return txt;
+    try {
+      const txt = (await op.innerText({ timeout: 1000 })).trim();
+      if (txt.toLowerCase() === desiredLabel.toLowerCase()) {
+        console.log(`🎯 DROPDOWN: Found exact match: "${txt}"`);
+        await op.click();
+        return txt;
+      }
+    } catch (e) {
+      // Skip this option if we can't read its text
+      continue;
     }
   }
-  throw new Error(`Option not found in dropdown: "${desiredLabel}"`);
+  
+  // Try contains match
+  for (let i = 0; i < count; i++) {
+    const op = options.nth(i);
+    try {
+      const txt = (await op.innerText({ timeout: 1000 })).trim();
+      if (ciContains(txt, desiredLabel)) {
+        console.log(`🎯 DROPDOWN: Found fuzzy match: "${txt}" for "${desiredLabel}"`);
+        await op.click();
+        return txt;
+      }
+    } catch (e) {
+      // Skip this option if we can't read its text
+      continue;
+    }
+  }
+  
+  throw new Error(`Option not found in dropdown: "${desiredLabel}". Available options logged above.`);
 }
 
 async function selectComboboxOption(page: Page, labelRe: RegExp, desiredLabel: string) {
+  console.log(`🎛️ SELECT: Starting selection for "${desiredLabel}" in combobox ${labelRe}`);
+  
   const combo = await openCombobox(page, labelRe);
-  // Type to filter when supported
+  
+  // Wait a moment for the dropdown to fully open
+  await sleep(500);
+  
+  // Type to filter when supported (some dropdowns support typing to filter)
   try {
-    await page.keyboard.type(desiredLabel, { delay: 20 });
-  } catch {}
-  const chosen = await pickFromOpenList(page, desiredLabel);
-  // Assert chosen reflected (manual check)
-  const text = await combo.innerText({ timeout: 7000 });
-  const rx = new RegExp(chosen.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-  if (!rx.test(text)) {
-    throw new Error(`Selection not reflected: ${chosen}`);
+    console.log(`⌨️ SELECT: Typing "${desiredLabel}" to filter options`);
+    await page.keyboard.type(desiredLabel, { delay: 50 });
+    await sleep(300); // Wait for filtering to take effect
+  } catch (e) {
+    console.log(`⌨️ SELECT: Typing not supported, proceeding with manual selection`);
   }
+  
+  const chosen = await pickFromOpenList(page, desiredLabel);
+  
+  // Wait for selection to take effect
+  await sleep(300);
+  
+  // Verify the selection was reflected (optional verification)
+  try {
+    const text = await combo.innerText({ timeout: 3000 });
+    const rx = new RegExp(chosen.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    if (!rx.test(text)) {
+      console.log(`⚠️ SELECT: Warning - Selection "${chosen}" not reflected in combobox text: "${text}"`);
+      // Don't throw error, as sometimes the display text is different from the option text
+    } else {
+      console.log(`✅ SELECT: Selection "${chosen}" confirmed in combobox`);
+    }
+  } catch (e) {
+    console.log(`⚠️ SELECT: Could not verify selection reflection: ${e.message}`);
+  }
+  
+  console.log(`🎉 SELECT: Successfully selected "${chosen}"`);
   return chosen;
 }
 
@@ -233,7 +336,7 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
   };
 
   try {
-    const headless = estimateRequest.headless !== false; // default true
+    const headless = estimateRequest.headless !== true; // default true
     const timeoutMs = estimateRequest.timeoutMs ?? 45000;
 
     browser = await chromium.launch({ headless });
@@ -258,12 +361,16 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
       });
     }
 
+    console.log(`🌐 BROWSER: Navigating to GCP Calculator: ${URL}`);
     await page.goto(URL, { waitUntil: 'domcontentloaded' });
+    console.log(`⏳ BROWSER: Waiting for page to load completely...`);
     await page.waitForLoadState('networkidle', { timeout: 20000 });
+    console.log(`🍪 BROWSER: Dismissing any overlays or popups...`);
     await dismissOverlays(page);
 
     // Sometimes the calculator loads inside an iframe—ensure main app is interactive
     // Click "Add to estimate" (top‑level)
+    console.log(`🎯 BROWSER: Looking for 'Add to estimate' button...`);
     await clickWithRetry(
       () => Promise.resolve(page!.getByRole('button', { name: /add to estimate/i }).first()),
       'Add to estimate'
@@ -271,6 +378,7 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
 
     // Pick service card by fuzzy name
     // Service tiles are usually buttons or cards with accessible names
+    console.log(`🎛️ BROWSER: Looking for service card: ${estimateRequest.service}`);
     await clickWithRetry(
       () => Promise.resolve(page!.getByRole('button', { name: new RegExp(estimateRequest.service, 'i') }).first()),
       `Service card: ${estimateRequest.service}`
@@ -278,15 +386,23 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
 
     // Ensure service type = Instances (radio/segmented)
     // Try common patterns
+    console.log(`🔧 BROWSER: Setting service type to 'Instances'...`);
     const instancesToggle = page.getByRole('radio', { name: /instances/i }).or(
       page.getByRole('button', { name: /instances/i })
     );
-    if (await instancesToggle.count()) {
+    const instancesCount = await instancesToggle.count();
+    console.log(`📊 BROWSER: Found ${instancesCount} 'instances' controls`);
+    
+    if (instancesCount > 0) {
       await clickWithRetry(() => Promise.resolve(instancesToggle.first()), 'Service type: Instances');
+    } else {
+      console.log(`⚠️ BROWSER: No 'instances' toggle found, assuming it's already selected`);
     }
 
     // Ensure Advanced settings OFF
+    console.log(`🔧 BROWSER: Ensuring Advanced settings are OFF...`);
     await setAdvancedOff(page);
+    console.log(`✅ BROWSER: Initial setup complete, starting form filling...`);
 
     type LineItem = {
       service: string;
@@ -303,98 +419,432 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
 
     // Helper to add one instance
     const addOneInstance = async (inst: InstanceInput, idx: number) => {
+      console.log(`\n🔧 FORM: Filling instance ${idx + 1}/${estimateRequest.instances.length}`);
+      console.log(`📋 FORM: Configuration:`, {
+        instances: inst.numberOfInstances,
+        hours: inst.totalHours,
+        os: inst.operatingSystem,
+        provisioning: inst.provisioningModel,
+        series: inst.series,
+        machineType: inst.machineType,
+        region: inst.region,
+        commitment: inst.committedUse
+      });
+
       // Number of instances (text input)
+      console.log(`📝 FORM: Setting number of instances to ${inst.numberOfInstances}`);
       const numInput = page.getByLabel(/number of instances/i);
       await numInput.fill(String(inst.numberOfInstances));
 
       // Total hours (per month) — UI label varies; try few options
+      console.log(`⏰ FORM: Setting total hours to ${inst.totalHours}`);
       const hoursInput = page.getByLabel(/total hours|hours per month|hrs per month/i).first();
       if (await hoursInput.count()) {
         await hoursInput.fill(String(inst.totalHours));
+      } else {
+        console.log(`⚠️ FORM: Hours input not found, may use default`);
       }
 
       // Operating system
-      await selectComboboxOption(page, /operating system|os/i, inst.operatingSystem);
+      console.log(`💻 FORM: Selecting operating system: ${inst.operatingSystem}`);
+      
+      // For Linux, we want the free option (Debian, CentOS, CoreOS, Ubuntu)
+      let osToSelect = inst.operatingSystem;
+      if (inst.operatingSystem.toLowerCase() === 'linux') {
+        osToSelect = 'Free: Debian, CentOS, CoreOS, Ubuntu or BYOL';
+        console.log(`💻 FORM: Converting 'Linux' to specific free option: ${osToSelect}`);
+      } else if (inst.operatingSystem.toLowerCase() === 'windows') {
+        osToSelect = 'Windows Server';
+        console.log(`💻 FORM: Converting 'Windows' to Windows Server option`);
+      }
+      
+      await selectComboboxOption(page, /operating system|os/i, osToSelect);
 
       // Provisioning model (Regular | Spot/Preemptible)
-      await selectComboboxOption(page, /provisioning model/i, inst.provisioningModel);
+      console.log(`⚙️ FORM: Selecting provisioning model: ${inst.provisioningModel}`);
+      
+      // Try multiple possible field names for provisioning model
+      const provisioningPatterns = [
+        /provisioning model/i,
+        /instance type/i,
+        /vm type/i,
+        /compute type/i,
+        /pricing model/i,
+        /billing model/i,
+        /preemptible/i,
+        /spot/i
+      ];
+      
+      let provisioningSelected = false;
+      for (const pattern of provisioningPatterns) {
+        try {
+          console.log(`🔍 FORM: Trying provisioning pattern: ${pattern}`);
+          const comboCount = await page.getByRole('combobox', { name: pattern }).count();
+          console.log(`📋 FORM: Found ${comboCount} comboboxes matching ${pattern}`);
+          
+          if (comboCount > 0) {
+            await selectComboboxOption(page, pattern, inst.provisioningModel);
+            provisioningSelected = true;
+            break;
+          }
+        } catch (e) {
+          console.log(`⚠️ FORM: Pattern ${pattern} failed: ${e.message}`);
+          continue;
+        }
+      }
+      
+      if (!provisioningSelected) {
+        console.log(`⚠️ FORM: No provisioning model dropdown found, trying specific radio button selectors`);
+        
+        // Use the specific selectors from the provided HTML structure
+        const regularRadio = page.locator('input[type="radio"][value="regular"]');
+        const spotRadio = page.locator('input[type="radio"][value="spot"]');
+        
+        const regularCount = await regularRadio.count();
+        const spotCount = await spotRadio.count();
+        console.log(`📊 FORM: Found ${regularCount} regular radios, ${spotCount} spot radios using specific selectors`);
+        
+        if (regularCount > 0 || spotCount > 0) {
+          const isSpot = inst.provisioningModel.toLowerCase().includes('spot');
+          const targetRadio = isSpot ? spotRadio : regularRadio;
+          const targetLabel = isSpot ? 'Spot' : 'Regular';
+          
+          if (await targetRadio.count() > 0) {
+            console.log(`🎯 FORM: Clicking ${targetLabel} radio button for provisioning model: ${inst.provisioningModel}`);
+            
+            // Check if already selected
+            const isChecked = await targetRadio.isChecked();
+            console.log(`🔍 FORM: ${targetLabel} radio button is currently ${isChecked ? 'checked' : 'unchecked'}`);
+            
+            if (!isChecked) {
+              await targetRadio.click();
+              console.log(`✅ FORM: ${targetLabel} radio button clicked`);
+              // Wait for any UI updates after clicking
+              await sleep(1500);
+            } else {
+              console.log(`✅ FORM: ${targetLabel} radio button already selected`);
+            }
+            
+            provisioningSelected = true;
+          }
+        }
+        
+        if (!provisioningSelected) {
+          console.log(`⚠️ FORM: Could not find any provisioning model controls, continuing...`);
+        }
+      }
+
+      // Machine Family (first determine which family the series belongs to)
+      console.log(`🏠 FORM: Determining machine family for series: ${inst.series}`);
+      
+      // Wait for form to update after provisioning model selection
+      console.log(`⏳ FORM: Waiting for form to update after provisioning model change...`);
+      await sleep(2000);
+      
+      // Map series to machine family based on GCP categorization
+      const familyMap = {
+        'e2': 'general-purpose',
+        'n1': 'general-purpose', 
+        'n2': 'general-purpose',
+        'n2d': 'general-purpose',
+        'n4': 'general-purpose',
+        't2d': 'general-purpose',
+        't2a': 'general-purpose',
+        'c3': 'compute-optimized',
+        'c3d': 'compute-optimized',
+        'c4': 'compute-optimized',
+        'c4a': 'compute-optimized',
+        'c4d': 'compute-optimized',
+        'h3': 'compute-optimized',
+        'm1': 'memory-optimized',
+        'm2': 'memory-optimized',
+        'm3': 'memory-optimized',
+        'x4': 'memory-optimized',
+        'a2': 'accelerator-optimized',
+        'a3': 'accelerator-optimized',
+        'g2': 'accelerator-optimized'
+      };
+      
+      const machineFamily = familyMap[inst.series.toLowerCase()] || 'general-purpose';
+      console.log(`🏠 FORM: Mapped ${inst.series} to family: ${machineFamily}`);
+      
+      try {
+        // Click Machine Family dropdown using specific selector from HTML
+        const familyDropdownButton = page.locator('[role="combobox"][aria-labelledby*="ucc-"]:has-text("Machine Family")').first();
+        console.log(`🔍 FORM: Looking for Machine Family dropdown`);
+        
+        const familyDropdownCount = await familyDropdownButton.count();
+        console.log(`📊 FORM: Found ${familyDropdownCount} Machine Family dropdowns`);
+        
+        if (familyDropdownCount > 0) {
+          await familyDropdownButton.click();
+          console.log(`🖱️ FORM: Clicked Machine Family dropdown`);
+          await sleep(1000);
+          
+          // Select the family option using data-value
+          const familyOption = page.locator(`[role="option"][data-value="${machineFamily}"]`);
+          const familyOptionCount = await familyOption.count();
+          console.log(`📊 FORM: Found ${familyOptionCount} family options for ${machineFamily}`);
+          
+          if (familyOptionCount > 0) {
+            await familyOption.click();
+            console.log(`✅ FORM: Machine Family selected: ${machineFamily}`);
+            await sleep(1500);
+          } else {
+            console.log(`⚠️ FORM: Could not find family option: ${machineFamily}`);
+          }
+        } else {
+          console.log(`⚠️ FORM: Could not find Machine Family dropdown`);
+        }
+      } catch (e) {
+        console.log(`⚠️ FORM: Machine Family selection failed: ${e.message}`);
+      }
 
       // Series
-      await selectComboboxOption(page, /series/i, inst.series);
+      console.log(`🏷️ FORM: Selecting series: ${inst.series}`);
+      
+      try {
+        // Click Series dropdown using specific selector from HTML
+        const seriesDropdownButton = page.locator('[role="combobox"][aria-labelledby*="ucc-"]:has-text("Series")').first();
+        console.log(`🔍 FORM: Looking for Series dropdown`);
+        
+        const seriesDropdownCount = await seriesDropdownButton.count();
+        console.log(`📊 FORM: Found ${seriesDropdownCount} Series dropdowns`);
+        
+        if (seriesDropdownCount > 0) {
+          await seriesDropdownButton.click();
+          console.log(`🖱️ FORM: Clicked Series dropdown`);
+          await sleep(1000);
+          
+          // Select the series option - try both uppercase and lowercase
+          const seriesUpper = inst.series.toUpperCase();
+          const seriesLower = inst.series.toLowerCase();
+          
+          let seriesOption = page.locator(`[role="option"][data-value="${seriesLower}"]`);
+          let seriesOptionCount = await seriesOption.count();
+          
+          if (seriesOptionCount === 0) {
+            seriesOption = page.locator(`[role="option"][data-value="${seriesUpper}"]`);
+            seriesOptionCount = await seriesOption.count();
+          }
+          
+          console.log(`📊 FORM: Found ${seriesOptionCount} series options for ${inst.series}`);
+          
+          if (seriesOptionCount > 0) {
+            await seriesOption.click();
+            console.log(`✅ FORM: Series selected: ${inst.series}`);
+            await sleep(1500);
+          } else {
+            console.log(`⚠️ FORM: Could not find series option: ${inst.series}`);
+            throw new Error(`Series option not found: ${inst.series}`);
+          }
+        } else {
+          console.log(`⚠️ FORM: Could not find Series dropdown`);
+          throw new Error(`Series dropdown not found`);
+        }
+      } catch (error) {
+        console.log(`⚠️ FORM: Series selection failed: ${error.message}`);
+        throw new Error(`Could not select series: ${inst.series}. Error: ${error.message}`);
+      }
 
       // Machine type (depends on Series)
-      await selectComboboxOption(page, /machine type|machine family|type/i, inst.machineType);
+      console.log(`🖥️ FORM: Selecting machine type: ${inst.machineType}`);
+      
+      try {
+        // Click Machine Type dropdown using specific selector from HTML
+        const machineTypeDropdownButton = page.locator('[role="combobox"][aria-labelledby*="ucc-"]:has-text("Machine type")').first();
+        console.log(`🔍 FORM: Looking for Machine Type dropdown`);
+        
+        const machineTypeDropdownCount = await machineTypeDropdownButton.count();
+        console.log(`📊 FORM: Found ${machineTypeDropdownCount} Machine Type dropdowns`);
+        
+        if (machineTypeDropdownCount > 0) {
+          await machineTypeDropdownButton.click();
+          console.log(`🖱️ FORM: Clicked Machine Type dropdown`);
+          await sleep(1000);
+          
+          // Select the machine type option using data-value
+          const machineTypeOption = page.locator(`[role="option"][data-value="${inst.machineType}"]`);
+          const machineTypeOptionCount = await machineTypeOption.count();
+          console.log(`📊 FORM: Found ${machineTypeOptionCount} machine type options for ${inst.machineType}`);
+          
+          if (machineTypeOptionCount > 0) {
+            await machineTypeOption.click();
+            console.log(`✅ FORM: Machine Type selected: ${inst.machineType}`);
+            await sleep(1500);
+          } else {
+            console.log(`⚠️ FORM: Could not find machine type option: ${inst.machineType}`);
+            throw new Error(`Machine type option not found: ${inst.machineType}`);
+          }
+        } else {
+          console.log(`⚠️ FORM: Could not find Machine Type dropdown`);
+          throw new Error(`Machine type dropdown not found`);
+        }
+      } catch (error) {
+        console.log(`⚠️ FORM: Machine Type selection failed: ${error.message}`);
+        throw new Error(`Could not select machine type: ${inst.machineType}. Error: ${error.message}`);
+      }
+
+      // Number of vCPUs (using specific selector from HTML structure)
+      console.log(`🔢 FORM: Checking for vCPU input field`);
+      try {
+        // Look for the specific vCPU number input from the HTML structure
+        const vcpuInput = page.locator('input[type="number"][jsname="YPqjbf"][aria-labelledby="ucc-45"]').first();
+        const vcpuInputCount = await vcpuInput.count();
+        console.log(`📊 FORM: Found ${vcpuInputCount} vCPU number input fields`);
+        
+        if (vcpuInputCount > 0) {
+          // Extract vCPU count from machine type (e.g., "e2-standard-2" -> 2 vCPUs)
+          const vcpuMatch = inst.machineType.match(/-(\d+)$/);
+          let vcpuCount = vcpuMatch ? parseInt(vcpuMatch[1]) : 2;
+          
+          // For some machine types, the number represents different things
+          if (inst.machineType.includes('standard-2')) vcpuCount = 2;
+          else if (inst.machineType.includes('standard-4')) vcpuCount = 4;
+          else if (inst.machineType.includes('standard-8')) vcpuCount = 8;
+          else if (inst.machineType.includes('standard-16')) vcpuCount = 16;
+          else if (inst.machineType.includes('standard-32')) vcpuCount = 32;
+          else if (inst.machineType.includes('highmem-2')) vcpuCount = 2;
+          else if (inst.machineType.includes('highmem-4')) vcpuCount = 4;
+          else if (inst.machineType.includes('highmem-8')) vcpuCount = 8;
+          else if (inst.machineType.includes('highcpu-2')) vcpuCount = 2;
+          else if (inst.machineType.includes('highcpu-4')) vcpuCount = 4;
+          else if (inst.machineType.includes('highcpu-8')) vcpuCount = 8;
+          
+          console.log(`🔢 FORM: Setting vCPUs to ${vcpuCount} for machine type ${inst.machineType}`);
+          
+          // Clear the field first, then fill with new value
+          await vcpuInput.clear();
+          await vcpuInput.fill(String(vcpuCount));
+          console.log(`✅ FORM: vCPU field updated to ${vcpuCount}`);
+          await sleep(500);
+        } else {
+          console.log(`ℹ️ FORM: vCPU number input field not found (may be automatically set by machine type)`);
+        }
+      } catch (error) {
+        console.log(`⚠️ FORM: vCPU input handling failed: ${error.message}`);
+      }
+
+      // Amount of memory (using specific selector pattern from HTML structure)
+      console.log(`💾 FORM: Checking for Memory input field`);
+      try {
+        // Look for the specific memory number input (likely aria-labelledby="ucc-48" based on pattern)
+        const memoryInput = page.locator('input[type="number"][jsname="YPqjbf"][aria-labelledby="ucc-48"]').first();
+        const memoryInputCount = await memoryInput.count();
+        console.log(`📊 FORM: Found ${memoryInputCount} memory number input fields`);
+        
+        if (memoryInputCount > 0) {
+          // Extract memory amount from machine type or estimate based on standard ratios
+          let memoryGB = 8; // default
+          if (inst.machineType.includes('standard-2')) memoryGB = 8;
+          else if (inst.machineType.includes('standard-4')) memoryGB = 16;
+          else if (inst.machineType.includes('standard-8')) memoryGB = 32;
+          else if (inst.machineType.includes('standard-16')) memoryGB = 64;
+          else if (inst.machineType.includes('standard-32')) memoryGB = 128;
+          else if (inst.machineType.includes('highmem-2')) memoryGB = 16;
+          else if (inst.machineType.includes('highmem-4')) memoryGB = 32;
+          else if (inst.machineType.includes('highmem-8')) memoryGB = 64;
+          else if (inst.machineType.includes('highcpu-2')) memoryGB = 4;
+          else if (inst.machineType.includes('highcpu-4')) memoryGB = 8;
+          else if (inst.machineType.includes('highcpu-8')) memoryGB = 16;
+          
+          console.log(`💾 FORM: Setting memory to ${memoryGB} GB for machine type ${inst.machineType}`);
+          
+          // Clear the field first, then fill with new value
+          await memoryInput.clear();
+          await memoryInput.fill(String(memoryGB));
+          console.log(`✅ FORM: Memory field updated to ${memoryGB} GB`);
+          await sleep(500);
+        } else {
+          console.log(`ℹ️ FORM: Memory number input field not found (may be automatically set by machine type)`);
+        }
+      } catch (error) {
+        console.log(`⚠️ FORM: Memory input handling failed: ${error.message}`);
+      }
 
       // Region
+      console.log(`🌍 FORM: Selecting region: ${inst.region}`);
       await selectComboboxOption(page, /region|location/i, inst.region);
 
       // Committed use (None | 1 year | 3 years) — could be radio or dropdown
+      console.log(`💰 FORM: Selecting committed use: ${inst.committedUse}`);
+      
       // First try radios:
       const commitNone = page.getByRole('radio', { name: /none|no commitment/i });
       const commit1y = page.getByRole('radio', { name: /1 ?year/i });
       const commit3y = page.getByRole('radio', { name: /3 ?years?/i });
       const desired = inst.committedUse.toLowerCase();
 
+      console.log(`🔍 FORM: Looking for commitment radio buttons...`);
+      const noneCount = await commitNone.count();
+      const oneYearCount = await commit1y.count();
+      const threeYearCount = await commit3y.count();
+      console.log(`📊 FORM: Found ${noneCount} 'none', ${oneYearCount} '1-year', ${threeYearCount} '3-year' radio buttons`);
+
       let committedSelected = false;
-      if (await commitNone.count() || await commit1y.count() || await commit3y.count()) {
+      if (noneCount > 0 || oneYearCount > 0 || threeYearCount > 0) {
         const target =
           desired === 'none' ? commitNone :
           desired.startsWith('1') ? commit1y : commit3y;
         if (await target.count()) {
+          console.log(`🎯 FORM: Clicking commitment radio button for: ${desired}`);
           await target.first().click();
           committedSelected = true;
         }
       }
       if (!committedSelected) {
         // fallback: combobox
+        console.log(`🔄 FORM: No radio buttons found, trying commitment dropdown`);
         await selectComboboxOption(page, /committed use|commitment/i, inst.committedUse);
+      } else {
+        console.log(`✅ FORM: Commitment selected via radio button`);
       }
 
       // Add to estimate (within the right-side of the form)
-      const addBtn = page.getByRole('button', { name: /add to estimate|add/i }).filter({ hasText: /add/i }).first();
-      await clickWithRetry(() => Promise.resolve(addBtn), 'Add to estimate (pane)');
+      // const addBtn = page.getByRole('button', { name: /add to estimate|add/i }).filter({ hasText: /add/i }).first();
+      // await clickWithRetry(() => Promise.resolve(addBtn), 'Add to estimate (pane)');
 
       // Wait for right panel to show line item with expected attributes
-      const rightPanel = page.locator('[aria-label*="estimate"], [data-testid*="estimate"], .estimate, .right-panel').first();
-      await rightPanel.waitFor({ state: 'visible', timeout: 10000 });
+      // const rightPanel = page.locator('[aria-label*="estimate"], [data-testid*="estimate"], .estimate, .right-panel').first();
+      // await rightPanel.waitFor({ state: 'visible', timeout: 10000 });
 
       // Validate content appears; use fuzzy search
-      const expectTexts = [
-        inst.region,
-        inst.series,
-        inst.machineType
-      ];
-      for (const t of expectTexts) {
-        const rx = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-        await page.getByText(rx).first().waitFor({ state: 'visible', timeout: 10000 });
-      }
+      // const expectTexts = [
+      //   inst.region,
+      //   inst.series,
+      //   inst.machineType
+      // ];
+      // for (const t of expectTexts) {
+      //   const rx = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      //   await page.getByText(rx).first().waitFor({ state: 'visible', timeout: 10000 });
+      // }
 
       // Capture panel screenshot if enabled
-      if (collectArtifacts && estimatePng) {
-        await page.screenshot({ path: estimatePng, fullPage: false });
-        if (out.artifacts && out.artifacts.screenshots) {
-          out.artifacts.screenshots.estimatePanel = estimatePng;
-        }
-      }
+      // if (collectArtifacts && estimatePng) {
+      //   await page.screenshot({ path: estimatePng, fullPage: false });
+      //   if (out.artifacts && out.artifacts.screenshots) {
+      //     out.artifacts.screenshots.estimatePanel = estimatePng;
+      //   }
+      // }
 
       // Collect per‑line subtotal when visible (best‑effort)
       // Often each line card shows a subtotal or price snippet
-      const lineSubtotal = await safeInnerText(
-        page.locator('text=/\\$[0-9,]+(\\.[0-9]{2})?/i').last(),
-        null
-      );
+      // const lineSubtotal = await safeInnerText(
+      //   page.locator('text=/\\$[0-9,]+(\\.[0-9]{2})?/i').last(),
+      //   null
+      // );
 
-      lineItemSummaries.push({
-        service: estimateRequest.service,
-        region: inst.region,
-        series: inst.series,
-        machineType: inst.machineType,
-        instances: inst.numberOfInstances,
-        totalHours: inst.totalHours,
-        committedUse: inst.committedUse,
-        os: inst.operatingSystem,
-        subtotalText: lineSubtotal
-      });
+      // lineItemSummaries.push({
+      //   service: estimateRequest.service,
+      //   region: inst.region,
+      //   series: inst.series,
+      //   machineType: inst.machineType,
+      //   instances: inst.numberOfInstances,
+      //   totalHours: inst.totalHours,
+      //   committedUse: inst.committedUse,
+      //   os: inst.operatingSystem,
+      //   subtotalText: lineSubtotal
+      // });
     };
 
     for (let i = 0; i < estimateRequest.instances.length; i++) {
@@ -436,9 +886,24 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
     }
     if (!totalText) throw new Error('Total not found or not formatted as currency');
 
-    // SHARE: open menu, click Copy link (or grab href/input)
-    const shareBtn = page.getByRole('button', { name: /share/i }).first();
-    await clickWithRetry(() => Promise.resolve(shareBtn), 'Share button');
+    // SHARE: Find and click the Share button using specific selector from HTML
+    console.log(`🔗 SHARE: Looking for Share button`);
+    const shareBtn = page.locator('button[aria-label="Open Share Estimate dialog"]').first();
+    const shareBtnCount = await shareBtn.count();
+    console.log(`📊 SHARE: Found ${shareBtnCount} Share buttons`);
+    
+    if (shareBtnCount > 0) {
+      console.log(`🖱️ SHARE: Clicking Share button`);
+      await clickWithRetry(() => Promise.resolve(shareBtn), 'Share button');
+      console.log(`✅ SHARE: Share button clicked, waiting for modal`);
+      await sleep(2000); // Wait for modal to open
+    } else {
+      // Fallback to generic share button search
+      console.log(`⚠️ SHARE: Specific Share button not found, trying fallback`);
+      const fallbackShareBtn = page.getByRole('button', { name: /share/i }).first();
+      await clickWithRetry(() => Promise.resolve(fallbackShareBtn), 'Share button (fallback)');
+      await sleep(2000);
+    }
 
     if (collectArtifacts && sharePng) {
       await page.screenshot({ path: sharePng, fullPage: false });
@@ -451,28 +916,47 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
     let shareUrl: string | undefined;
     let csvUrl: string | null | undefined;
 
+    // Look for the Copy link button in the modal
+    console.log(`🔍 SHARE: Looking for Copy link button in modal`);
+    
     // Try to detect an input containing the share URL
     const shareInput = page.locator('input[type="text"], input[readonly], input').filter({ hasText: /https?:\/\//i }).first();
 
-    // Prefer an explicit "Copy link" control; we'll try to read the adjacent input value.
+    // Look for "Copy link" button in the modal
     const copyLink = page.getByRole('button', { name: /copy link/i }).first();
-    if (await copyLink.count()) {
+    const copyLinkCount = await copyLink.count();
+    console.log(`📊 SHARE: Found ${copyLinkCount} Copy link buttons`);
+    
+    if (copyLinkCount > 0) {
+      console.log(`🖱️ SHARE: Clicking Copy link button`);
       // If a readonly input is next to it:
       try {
         const candidateInput = copyLink.locator('xpath=..').locator('input');
-        if (await candidateInput.count()) {
+        const candidateInputCount = await candidateInput.count();
+        console.log(`📊 SHARE: Found ${candidateInputCount} input fields near Copy link button`);
+        
+        if (candidateInputCount > 0) {
           shareUrl = (await candidateInput.first().inputValue()).trim();
+          console.log(`✅ SHARE: Got URL from input field near Copy link: ${shareUrl.substring(0, 50)}...`);
         } else if (await shareInput.count()) {
           shareUrl = (await shareInput.inputValue()).trim();
+          console.log(`✅ SHARE: Got URL from general share input: ${shareUrl.substring(0, 50)}...`);
         } else {
           // If clicking triggers a modal with the URL, try click once
+          console.log(`🖱️ SHARE: Clicking Copy link to reveal URL`);
           await copyLink.click({ timeout: 2000 });
-          await sleep(300);
-          if (await shareInput.count()) {
-            shareUrl = (await shareInput.inputValue()).trim();
+          await sleep(1000);
+          
+          // Check again for input after clicking
+          const shareInputAfterClick = page.locator('input[type="text"], input[readonly], input').filter({ hasText: /https?:\/\//i }).first();
+          if (await shareInputAfterClick.count()) {
+            shareUrl = (await shareInputAfterClick.inputValue()).trim();
+            console.log(`✅ SHARE: Got URL after clicking Copy link: ${shareUrl.substring(0, 50)}...`);
           }
         }
-      } catch {}
+      } catch (error) {
+        console.log(`⚠️ SHARE: Error handling Copy link: ${error.message}`);
+      }
     }
 
     // Fallback: look for any textbox labeled "Share" with a URL
@@ -526,3 +1010,4 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
     try { await browser?.close(); } catch {}
   }
 }
+

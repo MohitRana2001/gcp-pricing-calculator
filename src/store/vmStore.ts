@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { VmConfig, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupportsExtendedMemory, getAllowedMemoryRange, loadMachineTypesData, getPricing } from '@/lib/calculator'
+import { VmConfig, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupportsExtendedMemory, getAllowedMemoryRange, loadMachineTypesData, getPricing, findMatchingMachineType } from '@/lib/calculator'
 
 export type ServiceType = 'compute-engine' | 'cloud-storage' | 'cloud-sql' | null
 
@@ -159,6 +159,7 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     runningHours: 730,
     quantity: 1,
     discountModel: 'On-Demand',
+    shareableLink: undefined,
     ...overrides
   }
   
@@ -206,6 +207,7 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
     quantity: ['quantity', 'count', 'instances', 'num_instances'],
     os: ['os', 'operating_system', 'system'],
     sqlLicense: ['sql_license', 'sql', 'license'],
+    shareableLink: ['shareable_link', 'shareableLink', 'public_link', 'publicLink', 'gcp_link', 'gcpLink', 'calculator_link', 'calculatorLink'],
   }
   
   const mapping: Record<string, string> = {}
@@ -278,6 +280,13 @@ function transformValue(value: string, targetField: string): any {
       }
       return 'none'
     
+    case 'shareableLink':
+      // Validate that it's a valid GCP calculator URL
+      if (value && value.includes('cloud.google.com/products/calculator')) {
+        return value
+      }
+      return undefined
+    
     default:
       return value
   }
@@ -336,18 +345,36 @@ export const useVmStore = create<VmStore>((set, get) => ({
           const updatedConfig = { ...config, ...updates }
           
           if (updates.isCustom !== undefined) {
-            if (updates.isCustom === false) {
-              const machineSpec = getMachineTypeSpecs(updatedConfig.name, updatedConfig.regionLocation)
-              if (machineSpec) {
-                updatedConfig.vCpus = machineSpec.vCpus
-                updatedConfig.memoryGB = machineSpec.memoryGB
-                updatedConfig.onDemandPerHour = machineSpec.onDemandPerHour
-                updatedConfig.cudOneYearPerHour = machineSpec.cudOneYearPerHour
-                updatedConfig.cudThreeYearPerHour = machineSpec.cudThreeYearPerHour
-                updatedConfig.spotPerHour = machineSpec.spotPerHour
+            if (updates.isCustom === true) {
+              // When switching to custom, set machine name to "Custom"
+              updatedConfig.name = "Custom"
+            } else if (updates.isCustom === false) {
+              // When switching from custom, try to find a matching machine type
+              const matchingType = findMatchingMachineType(
+                updatedConfig.series,
+                updatedConfig.regionLocation,
+                updatedConfig.vCpus,
+                updatedConfig.memoryGB
+              )
+              
+              if (matchingType) {
+                updatedConfig.name = matchingType.name
+                updatedConfig.description = matchingType.description
+                updatedConfig.cpuPlatform = matchingType.cpuPlatform
+                updatedConfig.onDemandPerHour = matchingType.onDemandPerHour
+                updatedConfig.cudOneYearPerHour = matchingType.cudOneYearPerHour
+                updatedConfig.cudThreeYearPerHour = matchingType.cudThreeYearPerHour
+                updatedConfig.spotPerHour = matchingType.spotPerHour
+              } else {
+                // If no matching type found, keep it custom
+                updatedConfig.isCustom = true
+                updatedConfig.name = "Custom"
               }
             }
           }
+          
+          // Note: vCPU and memory change detection is handled at the component level
+          // to avoid conflicts and ensure proper user experience
           
           if (updates.series && updates.series !== config.series) {
             const availableTypes = getAvailableMachineTypes(updates.series, updatedConfig.regionLocation)
@@ -467,7 +494,8 @@ export const useVmStore = create<VmStore>((set, get) => ({
       'Spot Per Hour ($)',
       'Estimated Cost ($)',
       'On-Demand Cost ($)',
-      'Savings ($)'
+      'Savings ($)',
+      'Public Shareable Link'
     ]
 
     const csvContent = [
@@ -491,7 +519,8 @@ export const useVmStore = create<VmStore>((set, get) => ({
         config.spotPerHour,
         config.estimatedCost,
         config.onDemandCost,
-        config.savings
+        config.savings,
+        config.shareableLink || ''
       ].join(','))
     ].join('\n')
 

@@ -46,10 +46,17 @@ interface GenerateUrlResponse {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    console.log(`🚀 API STEP 1: POST request received at /api/generate-gcp-url`);
+    console.log(`📝 API STEP 1.1: Request headers:`, Object.fromEntries(request.headers.entries()));
+    
     const body: GenerateUrlRequest = await request.json();
+    console.log(`📋 API STEP 2: Request body parsed successfully`);
+    console.log(`📋 API STEP 2.1: Raw body:`, JSON.stringify(body, null, 2));
+    
     const { configurations = [], options = {} } = body;
+    console.log(`📊 API STEP 2.2: Extracted ${configurations.length} configurations and options:`, options);
 
-    console.log(`🤖 Starting GCP Calculator automation for ${configurations.length} configurations`);
+    console.log(`🤖 API STEP 3: Starting GCP Calculator automation for ${configurations.length} configurations`);
 
     // Validate configurations
     const validation = validateVmConfigsForAutomation(configurations);

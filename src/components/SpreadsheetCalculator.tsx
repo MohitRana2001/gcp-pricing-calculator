@@ -13,6 +13,7 @@ import {
   getAvailableMachineTypes,
   getPricing,
   PricingDetails,
+  findMatchingMachineType,
 } from "@/lib/calculator";
 import { generateGcpCalculatorUrl } from "@/lib/gcpUrlGenerator";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,48 @@ export default function SpreadsheetCalculator() {
     value: string | number | boolean
   ) => {
     updateConfiguration(configId, { [field]: value });
+  };
+
+  const handleVcpuMemoryChange = (
+    configId: string,
+    field: "vCpus" | "memoryGB",
+    value: number
+  ) => {
+    const config = configurations.find((c) => c.id === configId);
+    if (!config) return;
+
+    const newVcpus = field === "vCpus" ? value : config.vCpus;
+    const newMemoryGB = field === "memoryGB" ? value : config.memoryGB;
+
+    // Always check if the new configuration matches a predefined machine type
+    const matchingType = findMatchingMachineType(
+      config.series,
+      config.regionLocation,
+      newVcpus,
+      newMemoryGB
+    );
+
+    if (matchingType) {
+      // Found a matching predefined machine type - switch to it
+      updateConfiguration(configId, {
+        [field]: value,
+        isCustom: false,
+        name: matchingType.name,
+        description: matchingType.description,
+        cpuPlatform: matchingType.cpuPlatform,
+        onDemandPerHour: matchingType.onDemandPerHour,
+        cudOneYearPerHour: matchingType.cudOneYearPerHour,
+        cudThreeYearPerHour: matchingType.cudThreeYearPerHour,
+        spotPerHour: matchingType.spotPerHour,
+      });
+    } else {
+      // No matching type found, set to custom
+      updateConfiguration(configId, {
+        [field]: value,
+        isCustom: true,
+        name: "Custom",
+      });
+    }
   };
 
   const handleMasterCheckboxChange = () => {
@@ -288,6 +331,9 @@ export default function SpreadsheetCalculator() {
                 <th className="min-w-[150px] p-3 text-left font-semibold">
                   3-Year CUD Inclusive
                 </th>
+                <th className="min-w-[200px] p-3 text-left font-semibold">
+                  Public Shareable Link
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -315,8 +361,9 @@ export default function SpreadsheetCalculator() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className={`border-t hover:bg-muted/25 transition-colors ${selectedIds.has(config.id) ? "bg-muted/50" : ""
-                        }`}
+                      className={`border-t hover:bg-muted/25 transition-colors ${
+                        selectedIds.has(config.id) ? "bg-muted/50" : ""
+                      }`}
                       onMouseEnter={() => setHoveredRow(config.id)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
@@ -330,9 +377,7 @@ export default function SpreadsheetCalculator() {
 
                       {/* Actions */}
                       <td className="p-3">
-                        <div
-                          className={`flex gap-1 transition-opacity`}
-                        >
+                        <div className={`flex gap-1 transition-opacity`}>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -360,6 +405,13 @@ export default function SpreadsheetCalculator() {
                                 const url = await generateGcpCalculatorUrl([
                                   config,
                                 ]);
+
+                                // Update the configuration with the generated link
+                                updateConfiguration(config.id, {
+                                  shareableLink: url,
+                                });
+
+                                // Open the URL in a new tab
                                 window.open(url, "_blank");
                               } catch (error) {
                                 console.error(
@@ -449,9 +501,62 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3 text-center">
                         <Checkbox
                           checked={config.isCustom}
-                          onCheckedChange={(checked) =>
-                            handleInputChange(config.id, "isCustom", checked)
-                          }
+                          onCheckedChange={(checked) => {
+                            const isChecked = checked === true;
+                            if (isChecked) {
+                              // When custom is enabled, set machine type to "Custom"
+                              updateConfiguration(config.id, {
+                                isCustom: true,
+                                name: "Custom",
+                              });
+                            } else {
+                              // When custom is disabled, try to find matching machine type
+                              const matchingType = findMatchingMachineType(
+                                config.series,
+                                config.regionLocation,
+                                config.vCpus,
+                                config.memoryGB
+                              );
+
+                              if (matchingType) {
+                                updateConfiguration(config.id, {
+                                  isCustom: false,
+                                  name: matchingType.name,
+                                  description: matchingType.description,
+                                  cpuPlatform: matchingType.cpuPlatform,
+                                  onDemandPerHour: matchingType.onDemandPerHour,
+                                  cudOneYearPerHour:
+                                    matchingType.cudOneYearPerHour,
+                                  cudThreeYearPerHour:
+                                    matchingType.cudThreeYearPerHour,
+                                  spotPerHour: matchingType.spotPerHour,
+                                });
+                              } else {
+                                // If no matching type found, pick the first available machine type for this series
+                                const availableTypes = getAvailableMachineTypes(
+                                  config.series,
+                                  config.regionLocation
+                                );
+                                if (availableTypes.length > 0) {
+                                  const firstType = availableTypes[0];
+                                  updateConfiguration(config.id, {
+                                    isCustom: false,
+                                    name: firstType.name,
+                                    vCpus: firstType.vCpus,
+                                    memoryGB: firstType.memoryGB,
+                                    description: firstType.description,
+                                    cpuPlatform: firstType.cpuPlatform,
+                                    onDemandPerHour: firstType.onDemandPerHour,
+                                    cudOneYearPerHour:
+                                      firstType.cudOneYearPerHour,
+                                    cudThreeYearPerHour:
+                                      firstType.cudThreeYearPerHour,
+                                    spotPerHour: firstType.spotPerHour,
+                                  });
+                                }
+                              }
+                            }
+                          }}
                         />
                       </td>
 
@@ -459,24 +564,33 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <Select
                           value={config.name}
+                          disabled={config.isCustom}
                           onValueChange={(value) => {
-                            const selectedType = availableTypes.find(
-                              (t) => t.name === value
-                            );
-                            if (selectedType) {
+                            if (value === "Custom") {
                               updateConfiguration(config.id, {
-                                name: selectedType.name,
-                                vCpus: selectedType.vCpus,
-                                memoryGB: selectedType.memoryGB,
-                                description: selectedType.description,
-                                cpuPlatform: selectedType.cpuPlatform,
-                                onDemandPerHour: selectedType.onDemandPerHour,
-                                cudOneYearPerHour:
-                                  selectedType.cudOneYearPerHour,
-                                cudThreeYearPerHour:
-                                  selectedType.cudThreeYearPerHour,
-                                spotPerHour: selectedType.spotPerHour,
+                                isCustom: true,
+                                name: "Custom",
                               });
+                            } else {
+                              const selectedType = availableTypes.find(
+                                (t) => t.name === value
+                              );
+                              if (selectedType) {
+                                updateConfiguration(config.id, {
+                                  isCustom: false,
+                                  name: selectedType.name,
+                                  vCpus: selectedType.vCpus,
+                                  memoryGB: selectedType.memoryGB,
+                                  description: selectedType.description,
+                                  cpuPlatform: selectedType.cpuPlatform,
+                                  onDemandPerHour: selectedType.onDemandPerHour,
+                                  cudOneYearPerHour:
+                                    selectedType.cudOneYearPerHour,
+                                  cudThreeYearPerHour:
+                                    selectedType.cudThreeYearPerHour,
+                                  spotPerHour: selectedType.spotPerHour,
+                                });
+                              }
                             }
                           }}
                         >
@@ -484,6 +598,7 @@ export default function SpreadsheetCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="Custom">Custom</SelectItem>
                             {availableTypes.map((type) => (
                               <SelectItem key={type.name} value={type.name}>
                                 {type.name}
@@ -496,12 +611,12 @@ export default function SpreadsheetCalculator() {
                       {/* vCPUs */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                          editingCell?.field === "vCpus" ? (
+                        editingCell?.field === "vCpus" ? (
                           <Input
                             type="number"
                             value={config.vCpus}
                             onChange={(e) =>
-                              handleInputChange(
+                              handleVcpuMemoryChange(
                                 config.id,
                                 "vCpus",
                                 parseInt(e.target.value) || 1
@@ -520,7 +635,6 @@ export default function SpreadsheetCalculator() {
                           <button
                             onClick={() => handleCellClick(config.id, "vCpus")}
                             className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
-                            disabled={!config.isCustom}
                           >
                             {config.vCpus}
                           </button>
@@ -530,13 +644,13 @@ export default function SpreadsheetCalculator() {
                       {/* Memory (GB) */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                          editingCell?.field === "memoryGB" ? (
+                        editingCell?.field === "memoryGB" ? (
                           <div>
                             <Input
                               type="number"
                               value={config.memoryGB}
                               onChange={(e) =>
-                                handleInputChange(
+                                handleVcpuMemoryChange(
                                   config.id,
                                   "memoryGB",
                                   parseFloat(e.target.value) || 1
@@ -546,10 +660,11 @@ export default function SpreadsheetCalculator() {
                               onKeyDown={(e) =>
                                 e.key === "Enter" && handleCellBlur()
                               }
-                              className={`h-8 text-sm ${memoryInfo && !memoryInfo.isValid
+                              className={`h-8 text-sm ${
+                                memoryInfo && !memoryInfo.isValid
                                   ? "border-red-500"
                                   : ""
-                                }`}
+                              }`}
                               min={memoryInfo?.min || 1}
                               max={memoryInfo?.max || 384}
                               step="0.25"
@@ -567,7 +682,6 @@ export default function SpreadsheetCalculator() {
                               handleCellClick(config.id, "memoryGB")
                             }
                             className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
-                            disabled={!config.isCustom}
                           >
                             <div className="flex items-center gap-1">
                               {config.memoryGB}
@@ -603,7 +717,7 @@ export default function SpreadsheetCalculator() {
                       {/* Running Hours */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                          editingCell?.field === "runningHours" ? (
+                        editingCell?.field === "runningHours" ? (
                           <Input
                             type="number"
                             value={config.runningHours}
@@ -638,7 +752,7 @@ export default function SpreadsheetCalculator() {
                       {/* Quantity */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                          editingCell?.field === "quantity" ? (
+                        editingCell?.field === "quantity" ? (
                           <Input
                             type="number"
                             value={config.quantity}
@@ -822,6 +936,78 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <div className="text-sm">
                           {formatCurrency(Number(pricing.cud3yInclusive))}
+                        </div>
+                      </td>
+
+                      {/* Public Shareable Link */}
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          {config.shareableLink ? (
+                            <>
+                              <Input
+                                value={config.shareableLink}
+                                readOnly
+                                className="h-8 text-xs font-mono"
+                                onClick={(e) => e.currentTarget.select()}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(
+                                    config.shareableLink!
+                                  );
+                                }}
+                                title="Copy link"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() =>
+                                  window.open(config.shareableLink, "_blank")
+                                }
+                                title="Open link"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8"
+                              onClick={async () => {
+                                try {
+                                  const { generateGcpCalculatorUrl } =
+                                    await import("@/lib/gcpUrlGenerator");
+                                  const url = await generateGcpCalculatorUrl([
+                                    config,
+                                  ]);
+
+                                  // Update the configuration with the generated link
+                                  updateConfiguration(config.id, {
+                                    shareableLink: url,
+                                  });
+                                } catch (error) {
+                                  console.error(
+                                    "Failed to generate GCP URL:",
+                                    error
+                                  );
+                                  // Fallback to opening the calculator manually
+                                  window.open(
+                                    "https://cloud.google.com/products/calculator",
+                                    "_blank"
+                                  );
+                                }
+                              }}
+                            >
+                              Generate Link
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </motion.tr>

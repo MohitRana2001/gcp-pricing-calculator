@@ -59,68 +59,112 @@ export async function generateGcpCalculatorUrl(
   options: GenerationOptions = {}
 ): Promise<string> {
   try {
-    console.log(`🤖 Generating GCP calculator URL for ${configs.length} configurations...`);
+    console.log(`🤖 STEP 1: Starting GCP calculator URL generation for ${configs.length} configurations...`);
+    console.log(`📋 STEP 1.1: Configurations received:`, configs.map(c => ({ 
+      id: c.id, 
+      name: c.name, 
+      series: c.series, 
+      region: c.regionLocation,
+      provisioningModel: c.provisioningModel 
+    })));
+    console.log(`⚙️ STEP 1.2: Options:`, options);
     
     // Validate configurations before sending to API if requested
+    console.log(`🔍 STEP 2: Validating configurations...`);
     if (options.validateConfigs !== false) { // Default to true
       const validation = validateVmConfigsForAutomation(configs);
+      console.log(`✅ STEP 2.1: Validation result:`, validation);
       if (!validation.isValid) {
         const errorDetails = validation.errors.map(err => 
           `${err.configName}: ${err.errors.join(', ')}`
         ).join('; ');
+        console.error(`❌ STEP 2.2: Validation failed:`, errorDetails);
         throw new Error(`Configuration validation failed: ${errorDetails}`);
       }
+      console.log(`✅ STEP 2.3: All configurations are valid`);
     }
+    
+    console.log(`🌐 STEP 3: Making API request to: ${API_BASE_URL}`);
+    const requestBody = {
+      configurations: configs,
+      options: {
+        headless: options.headless !== false, // Default to headless
+        timeout: options.timeout || 45000, // Increased default timeout for complex automation
+        wantCsvLink: options.wantCsvLink || false,
+      },
+    };
+    console.log(`📤 STEP 3.1: Request body:`, JSON.stringify(requestBody, null, 2));
     
     const response = await fetch(API_BASE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        configurations: configs,
-        options: {
-          headless: options.headless !== false, // Default to headless
-          timeout: options.timeout || 45000, // Increased default timeout for complex automation
-          wantCsvLink: options.wantCsvLink || false,
-        },
-      }),
+      body: JSON.stringify(requestBody),
     });
 
+    console.log(`📥 STEP 4: Received response - Status: ${response.status} ${response.statusText}`);
+    console.log(`🔍 STEP 4.1: Response headers:`, Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      console.error(`❌ STEP 4.2: HTTP Error ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`❌ STEP 4.3: Error response body:`, errorText);
+      throw new Error(`HTTP ${response.status}: ${response.statusText}. Response: ${errorText}`);
+    }
+
     const data: GenerateUrlResponse = await response.json();
+    console.log(`📊 STEP 5: Parsed JSON response:`, data);
 
     if (!data.success) {
       const errorMessage = data.error || 'Failed to generate GCP calculator URL';
       const helpMessage = data.errorHelp || getAutomationErrorHelp(errorMessage);
       
-      console.error('❌ API Error:', errorMessage);
-      console.log('💡 Help:', helpMessage);
+      console.error('❌ STEP 5.1: API returned error:', errorMessage);
+      console.error('❌ STEP 5.2: Error help message:', helpMessage);
+      console.error('❌ STEP 5.3: Full error response:', data);
       
       throw new Error(`${errorMessage}${helpMessage ? ` (${helpMessage})` : ''}`);
     }
 
+    console.log(`✅ STEP 6: API call successful!`);
+
     if (!data.shareUrl) {
+      console.error('❌ STEP 6.1: No share URL in response');
+      console.error('❌ STEP 6.2: Full response data:', data);
       throw new Error('No share URL returned from the service');
     }
 
-    console.log(`✅ Successfully generated URL: ${data.shareUrl}`);
-    console.log(`📊 Processed ${data.details?.configurationsProcessed} configurations`);
+    console.log(`🎉 STEP 7: Successfully generated URL: ${data.shareUrl}`);
+    console.log(`📊 STEP 7.1: Processed ${data.details?.configurationsProcessed} configurations`);
+    console.log(`⏰ STEP 7.2: Timestamp: ${data.details?.timestamp}`);
     
     // Log additional details if available
     if (data.details?.summary) {
-      console.log(`💰 Total Cost: ${data.details.summary.totalCost || 'N/A'}`);
-      console.log(`📋 Line Items: ${data.details.summary.lineItems?.length || 0}`);
+      console.log(`💰 STEP 7.3: Total Cost: ${data.details.summary.totalCost || 'N/A'}`);
+      console.log(`📋 STEP 7.4: Line Items: ${data.details.summary.lineItems?.length || 0}`);
+      if (data.details.summary.lineItems) {
+        console.log(`📋 STEP 7.5: Line Items Details:`, data.details.summary.lineItems);
+      }
     }
     
     // Log artifacts if available
     if (data.artifacts?.screenshots) {
-      console.log('📸 Screenshots available:', Object.keys(data.artifacts.screenshots));
+      console.log('📸 STEP 7.6: Screenshots available:', Object.keys(data.artifacts.screenshots));
     }
 
+    console.log(`🚀 STEP 8: Returning share URL to caller`);
     return data.shareUrl;
 
   } catch (error) {
-    console.error('❌ Error generating GCP calculator URL:', error);
+    console.error('❌ CRITICAL ERROR: Exception in generateGcpCalculatorUrl:', error);
+    console.error('❌ ERROR STACK:', error instanceof Error ? error.stack : 'No stack trace available');
+    console.error('❌ ERROR TYPE:', typeof error);
+    console.error('❌ ERROR DETAILS:', error instanceof Error ? {
+      name: error.name,
+      message: error.message,
+      cause: (error as any).cause || 'No cause available'
+    } : error);
     
     // Don't return fallback URL anymore - let the caller handle the error
     throw error;

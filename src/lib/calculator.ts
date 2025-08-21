@@ -26,6 +26,9 @@ export interface VmConfig {
   estimatedCost: number
   onDemandCost: number
   savings: number
+  
+  // Generated shareable link
+  shareableLink?: string
 }
 
 export interface CostCalculation {
@@ -375,6 +378,16 @@ export function getMachineTypeSpecs(machineTypeName: string, region: string): Ma
   return machineTypesData.find(machine => 
     machine.name === machineTypeName && 
     machine.regionLocation === region
+  ) || null
+}
+
+// Find matching machine type based on vCPU and memory configuration
+export function findMatchingMachineType(series: string, region: string, vCpus: number, memoryGB: number): MachineTypeData | null {
+  return machineTypesData.find(machine => 
+    machine.series === series && 
+    machine.regionLocation === region &&
+    machine.vCpus === vCpus &&
+    machine.memoryGB === memoryGB
   ) || null
 }
 
