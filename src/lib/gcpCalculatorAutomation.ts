@@ -335,7 +335,7 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
   };
 
   try {
-    const headless = estimateRequest.headless !== false;
+    const headless = estimateRequest.headless !== true;
     const timeoutMs = estimateRequest.timeoutMs ?? 45000;
 
     browser = await chromium.launch({
