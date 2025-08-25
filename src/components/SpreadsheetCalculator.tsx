@@ -115,7 +115,6 @@ export default function SpreadsheetCalculator() {
     const newVcpus = field === "vCpus" ? value : config.vCpus;
     const newMemoryGB = field === "memoryGB" ? value : config.memoryGB;
 
-    // Always check if the new configuration matches a predefined machine type
     const matchingType = findMatchingMachineType(
       config.series,
       config.regionLocation,
@@ -124,11 +123,11 @@ export default function SpreadsheetCalculator() {
     );
 
     if (matchingType) {
-      // Found a matching predefined machine type - switch to it
       updateConfiguration(configId, {
-        [field]: value,
         isCustom: false,
         name: matchingType.name,
+        vCpus: matchingType.vCpus,
+        memoryGB: matchingType.memoryGB,
         description: matchingType.description,
         cpuPlatform: matchingType.cpuPlatform,
         onDemandPerHour: matchingType.onDemandPerHour,
@@ -345,15 +344,6 @@ export default function SpreadsheetCalculator() {
                     config.regionLocation
                   );
                   const pricing = getPricing(config);
-                  console.log(
-                    {
-                      "checking onDemand:": formatCurrency(
-                        pricing.onDemandInclusive
-                      ),
-                    },
-                    { "checking onDemand:": pricing.cud1yInclusive },
-                    { "checking onDemand:": pricing.cud3yInclusive }
-                  );
                   return (
                     <motion.tr
                       key={config.id}

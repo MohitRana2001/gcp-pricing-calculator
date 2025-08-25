@@ -1,6 +1,3 @@
-// Advanced GCP Pricing Calculator URL Generator using Playwright automation
-// This script automates the official Google Cloud Pricing Calculator to generate shareable URLs
-
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { expect } from '@playwright/test';
 import fs from 'fs';
