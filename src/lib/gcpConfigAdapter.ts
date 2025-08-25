@@ -147,6 +147,9 @@ export function vmConfigToInstanceInput(config: VmConfig): InstanceInput {
     machineType: config.name, // e.g., e2-standard-4
     region: mapRegion(config.regionLocation),
     committedUse: mapDiscountModelToCommittedUse(config.provisioningModel),
+    isCustom: config.isCustom,
+    vCpus: config.vCpus,
+    memoryGB: config.memoryGB,
   };
 }
 
