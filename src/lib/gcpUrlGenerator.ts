@@ -5,7 +5,7 @@ import { VmConfig } from './calculator';
 import { validateVmConfigsForAutomation, getAutomationErrorHelp } from './gcpConfigAdapter';
 
 // Base URL for the API endpoint
-const API_BASE_URL = '/api/generate-gcp-url';
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_APP_URL || ''}/api/generate-gcp-url`;
 
 // Interface for API response (updated to match new automation)
 interface GenerateUrlResponse {

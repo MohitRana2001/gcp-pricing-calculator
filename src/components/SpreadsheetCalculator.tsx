@@ -101,7 +101,7 @@ export default function SpreadsheetCalculator() {
     field: string,
     value: string | number | boolean
   ) => {
-    updateConfiguration(configId, { [field]: value });
+    updateConfiguration(configId, { [field]: value, shareableLink: undefined });
   };
 
   const handleVcpuMemoryChange = (
@@ -134,6 +134,7 @@ export default function SpreadsheetCalculator() {
         cudOneYearPerHour: matchingType.cudOneYearPerHour,
         cudThreeYearPerHour: matchingType.cudThreeYearPerHour,
         spotPerHour: matchingType.spotPerHour,
+        shareableLink: undefined,
       });
     } else {
       // No matching type found, set to custom
@@ -141,6 +142,7 @@ export default function SpreadsheetCalculator() {
         [field]: value,
         isCustom: true,
         name: "Custom",
+        shareableLink: undefined,
       });
     }
   };
@@ -451,7 +453,6 @@ export default function SpreadsheetCalculator() {
                         <Select
                           value={config.series}
                           onValueChange={(value) => {
-                            handleInputChange(config.id, "series", value);
                             const availableTypes = getAvailableMachineTypes(
                               value,
                               config.regionLocation
@@ -470,6 +471,12 @@ export default function SpreadsheetCalculator() {
                                 cudThreeYearPerHour:
                                   firstType.cudThreeYearPerHour,
                                 spotPerHour: firstType.spotPerHour,
+                                shareableLink: undefined,
+                              });
+                            } else {
+                              updateConfiguration(config.id, {
+                                series: value,
+                                shareableLink: undefined,
                               });
                             }
                           }}
@@ -494,13 +501,12 @@ export default function SpreadsheetCalculator() {
                           onCheckedChange={(checked) => {
                             const isChecked = checked === true;
                             if (isChecked) {
-                              // When custom is enabled, set machine type to "Custom"
                               updateConfiguration(config.id, {
                                 isCustom: true,
                                 name: "Custom",
+                                shareableLink: undefined,
                               });
                             } else {
-                              // When custom is disabled, try to find matching machine type
                               const matchingType = findMatchingMachineType(
                                 config.series,
                                 config.regionLocation,
@@ -520,9 +526,9 @@ export default function SpreadsheetCalculator() {
                                   cudThreeYearPerHour:
                                     matchingType.cudThreeYearPerHour,
                                   spotPerHour: matchingType.spotPerHour,
+                                  shareableLink: undefined,
                                 });
                               } else {
-                                // If no matching type found, pick the first available machine type for this series
                                 const availableTypes = getAvailableMachineTypes(
                                   config.series,
                                   config.regionLocation
@@ -542,6 +548,7 @@ export default function SpreadsheetCalculator() {
                                     cudThreeYearPerHour:
                                       firstType.cudThreeYearPerHour,
                                     spotPerHour: firstType.spotPerHour,
+                                    shareableLink: undefined,
                                   });
                                 }
                               }
@@ -560,6 +567,7 @@ export default function SpreadsheetCalculator() {
                               updateConfiguration(config.id, {
                                 isCustom: true,
                                 name: "Custom",
+                                shareableLink: undefined,
                               });
                             } else {
                               const selectedType = availableTypes.find(
@@ -579,6 +587,7 @@ export default function SpreadsheetCalculator() {
                                   cudThreeYearPerHour:
                                     selectedType.cudThreeYearPerHour,
                                   spotPerHour: selectedType.spotPerHour,
+                                  shareableLink: undefined,
                                 });
                               }
                             }
@@ -846,6 +855,7 @@ export default function SpreadsheetCalculator() {
                           onValueChange={(value) => {
                             updateConfiguration(config.id, {
                               provisioningModel: value as any,
+                              shareableLink: undefined,
                             });
                           }}
                         >
@@ -934,16 +944,20 @@ export default function SpreadsheetCalculator() {
                         <div className="flex items-center gap-2">
                           {config.shareableLink ? (
                             <>
-                              <Input
-                                value={config.shareableLink}
-                                readOnly
-                                className="h-8 text-xs font-mono"
-                                onClick={(e) => e.currentTarget.select()}
-                              />
+                              <a
+                                href={config.shareableLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline text-sm truncate"
+                                title={config.shareableLink}
+                                style={{ maxWidth: '150px' }}
+                              >
+                                {config.shareableLink}
+                              </a>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6"
+                                className="h-8 w-8 flex-shrink-0"
                                 onClick={() => {
                                   navigator.clipboard.writeText(
                                     config.shareableLink!
@@ -951,18 +965,7 @@ export default function SpreadsheetCalculator() {
                                 }}
                                 title="Copy link"
                               >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() =>
-                                  window.open(config.shareableLink, "_blank")
-                                }
-                                title="Open link"
-                              >
-                                <ExternalLink className="h-3 w-3" />
+                                <Copy className="h-4 w-4" />
                               </Button>
                             </>
                           ) : (

@@ -538,69 +538,69 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
       await sleep(2000);
 
       // Map series to machine family based on GCP categorization
-      const familyMap = {
-        'e2': 'general-purpose',
-        'n1': 'general-purpose',
-        'n2': 'general-purpose',
-        'n2d': 'general-purpose',
-        'n4': 'general-purpose',
-        't2d': 'general-purpose',
-        't2a': 'general-purpose',
-        'c3': 'compute-optimized',
-        'c3d': 'compute-optimized',
-        'c4': 'compute-optimized',
-        'c4a': 'compute-optimized',
-        'c4d': 'compute-optimized',
-        'h3': 'compute-optimized',
-        'm1': 'memory-optimized',
-        'm2': 'memory-optimized',
-        'm3': 'memory-optimized',
-        'x4': 'memory-optimized',
-        'a2': 'accelerator-optimized',
-        'a3': 'accelerator-optimized',
-        'g2': 'accelerator-optimized'
-      };
+      // const familyMap = {
+      //   'e2': 'general-purpose',
+      //   'n1': 'general-purpose',
+      //   'n2': 'general-purpose',
+      //   'n2d': 'general-purpose',
+      //   'n4': 'general-purpose',
+      //   't2d': 'general-purpose',
+      //   't2a': 'general-purpose',
+      //   'c3': 'compute-optimized',
+      //   'c3d': 'compute-optimized',
+      //   'c4': 'compute-optimized',
+      //   'c4a': 'compute-optimized',
+      //   'c4d': 'compute-optimized',
+      //   'h3': 'compute-optimized',
+      //   'm1': 'memory-optimized',
+      //   'm2': 'memory-optimized',
+      //   'm3': 'memory-optimized',
+      //   'x4': 'memory-optimized',
+      //   'a2': 'accelerator-optimized',
+      //   'a3': 'accelerator-optimized',
+      //   'g2': 'accelerator-optimized'
+      // };
 
-      type FamilyMapKey = keyof typeof familyMap;
-      const potentialKey = inst.series.toLowerCase();
+      // type FamilyMapKey = keyof typeof familyMap;
+      // const potentialKey = inst.series.toLowerCase();
 
-      const machineFamily =
-        (potentialKey in familyMap)
-          ? familyMap[potentialKey as FamilyMapKey]
-          : 'general-purpose';
-      console.log(`🏠 FORM: Mapped ${inst.series} to family: ${machineFamily}`);
+      // const machineFamily =
+      //   (potentialKey in familyMap)
+      //     ? familyMap[potentialKey as FamilyMapKey]
+      //     : 'general-purpose';
+      // console.log(`🏠 FORM: Mapped ${inst.series} to family: ${machineFamily}`);
 
-      try {
-        // Click Machine Family dropdown using specific selector from HTML
-        const familyDropdownButton = page.locator('[role="combobox"][aria-labelledby*="ucc-"]:has-text("Machine Family")').first();
-        console.log(`🔍 FORM: Looking for Machine Family dropdown`);
+      // try {
+      //   // Click Machine Family dropdown using specific selector from HTML
+      //   const familyDropdownButton = page.locator('[role="combobox"][aria-labelledby*="ucc-"]:has-text("Machine Family")').first();
+      //   console.log(`🔍 FORM: Looking for Machine Family dropdown`);
 
-        const familyDropdownCount = await familyDropdownButton.count();
-        console.log(`📊 FORM: Found ${familyDropdownCount} Machine Family dropdowns`);
+      //   const familyDropdownCount = await familyDropdownButton.count();
+      //   console.log(`📊 FORM: Found ${familyDropdownCount} Machine Family dropdowns`);
 
-        if (familyDropdownCount > 0) {
-          await familyDropdownButton.click();
-          console.log(`🖱️ FORM: Clicked Machine Family dropdown`);
-          await sleep(1000);
+      //   if (familyDropdownCount > 0) {
+      //     await familyDropdownButton.click();
+      //     console.log(`🖱️ FORM: Clicked Machine Family dropdown`);
+      //     await sleep(1000);
 
-          // Select the family option using data-value
-          const familyOption = page.locator(`[role="option"][data-value="${machineFamily}"]`);
-          const familyOptionCount = await familyOption.count();
-          console.log(`📊 FORM: Found ${familyOptionCount} family options for ${machineFamily}`);
+      //     // Select the family option using data-value
+      //     const familyOption = page.locator(`[role="option"][data-value="${machineFamily}"]`);
+      //     const familyOptionCount = await familyOption.count();
+      //     console.log(`📊 FORM: Found ${familyOptionCount} family options for ${machineFamily}`);
 
-          if (familyOptionCount > 0) {
-            await familyOption.click();
-            console.log(`✅ FORM: Machine Family selected: ${machineFamily}`);
-            await sleep(1500);
-          } else {
-            console.log(`⚠️ FORM: Could not find family option: ${machineFamily}`);
-          }
-        } else {
-          console.log(`⚠️ FORM: Could not find Machine Family dropdown`);
-        }
-      } catch (e) {
-        console.log(`⚠️ FORM: Machine Family selection failed: ${(e as Error).message}`);
-      }
+      //     if (familyOptionCount > 0) {
+      //       await familyOption.click();
+      //       console.log(`✅ FORM: Machine Family selected: ${machineFamily}`);
+      //       await sleep(1500);
+      //     } else {
+      //       console.log(`⚠️ FORM: Could not find family option: ${machineFamily}`);
+      //     }
+      //   } else {
+      //     console.log(`⚠️ FORM: Could not find Machine Family dropdown`);
+      //   }
+      // } catch (e) {
+      //   console.log(`⚠️ FORM: Machine Family selection failed: ${(e as Error).message}`);
+      // }
 
       // Series
       console.log(`🏷️ FORM: Selecting series: ${inst.series}`);
