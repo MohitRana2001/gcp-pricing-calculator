@@ -7,20 +7,20 @@ export type InstanceInput = {
   numberOfInstances: number;
   totalHours: number;
   operatingSystem: string;
-  provisioningModel: string; // Regular | Spot/Preemptible (includes fuzzy)
-  series: string;            // e.g., E2, N2
-  machineType: string;       // e.g., e2-standard-4
-  region: string;            // e.g., Iowa (us-central1)
+  provisioningModel: string;
+  series: string;
+  machineType: string;
+  region: string;
   committedUse: 'none' | '1 year' | '3 years';
 };
 
 export type EstimateRequest = {
   headless?: boolean;
   timeoutMs?: number;
-  service: string; // e.g., 'Compute Engine'
+  service: string;
   instances: InstanceInput[];
   wantCsvLink?: boolean;
-  collectArtifacts?: boolean; // if true, write screenshots/HAR/logs to disk
+  collectArtifacts?: boolean;
 };
 
 export type OutputJSON = {
@@ -53,8 +53,7 @@ export type OutputJSON = {
   error?: string;
 };
 
-const URL = 'https://cloud.google.com/products/calculator?hl=en'; // keep hl=en for stable labels
-
+const URL = 'https://cloud.google.com/products/calculator?hl=en';
 // ---------- Utility functions ----------
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const backoffs = [300, 800, 1500];
@@ -333,7 +332,7 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
   };
 
   try {
-    const headless = estimateRequest.headless !== true; // default true
+    const headless = estimateRequest.headless !== false;
     const timeoutMs = estimateRequest.timeoutMs ?? 45000;
 
     browser = await chromium.launch({ headless });
