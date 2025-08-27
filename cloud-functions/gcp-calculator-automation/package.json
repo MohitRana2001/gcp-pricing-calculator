@@ -1,0 +1,21 @@
+{
+  "name": "gcp-calculator-automation",
+  "version": "1.0.0",
+  "description": "Google Cloud Function for GCP Calculator Playwright automation",
+  "main": "index.js",
+  "scripts": {
+    "start": "functions-framework --target=gcpCalculatorAutomation",
+    "deploy": "gcloud functions deploy gcp-calculator-automation --runtime nodejs20 --trigger http --allow-unauthenticated --memory 2GB --timeout 540s",
+    "deploy-auth": "gcloud functions deploy gcp-calculator-automation --runtime nodejs20 --trigger http --memory 2GB --timeout 540s",
+    "test": "node test-local.js",
+    "build": "npm install"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "playwright": "^1.54.2",
+    "playwright-core": "^1.54.2"
+  },
+  "engines": {
+    "node": "20"
+  }
+}

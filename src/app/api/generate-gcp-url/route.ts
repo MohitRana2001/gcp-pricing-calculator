@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { VmConfig } from '@/lib/calculator';
-import { runGcpCalculatorAutomation, EstimateRequest, OutputJSON } from '@/lib/gcpCalculatorAutomation';
-import { vmConfigsToEstimateRequest, validateVmConfigsForAutomation, getAutomationErrorHelp } from '@/lib/gcpConfigAdapter';
+import { callGcpCalculatorCloudFunction, CloudFunctionResponse } from '@/lib/cloudFunctionClient';
+import { validateVmConfigsForAutomation, getAutomationErrorHelp } from '@/lib/gcpConfigAdapter';
 
 // Interface for the API request
 interface GenerateUrlRequest {
@@ -88,23 +88,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }, { status: 400 });
     }
 
-    // Convert VmConfigs to EstimateRequest format with enhanced VM options
-    const estimateRequest = vmConfigsToEstimateRequest(configurations, {
-      headless: options.headless !== false, // Default to true for VM environments
-      timeoutMs: options.timeout || 60000, // Increase timeout for VM environments
-      service: 'Compute Engine',
-      wantCsvLink: options.wantCsvLink || false,
-      commitment: commitment, // Pass down the specific commitment
-      debug: options.debug || false,
-    });
-
-    // Run the advanced Playwright automation with VM-optimized settings
-    console.log('🎭 Running advanced Playwright automation...');
-    const result: OutputJSON = await runGcpCalculatorAutomation({
-      ...estimateRequest,
-      collectArtifacts: options.debug || false, // Collect artifacts in debug mode
-      vmOptimized: true, // Flag for VM-specific optimizations
-    });
+    // Call Cloud Function for automation
+    console.log('☁️ Calling Cloud Function for GCP Calculator automation...');
+    const result: CloudFunctionResponse = await callGcpCalculatorCloudFunction(
+      configurations,
+      commitment,
+      {
+        wantCsvLink: options.wantCsvLink || false,
+        timeout: options.timeout || 60000,
+        debug: options.debug || false,
+      }
+    );
 
     if (!result.success) {
       const errorHelp = getAutomationErrorHelp(result.error || '');
@@ -114,8 +108,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         error: result.error || 'Unknown automation error',
         errorHelp,
         artifacts: {
-          screenshots: result.artifacts?.screenshots,
-          logs: result.artifacts?.consoleLogs
+          screenshots: undefined, // Cloud Function doesn't return screenshots by default
+          logs: undefined
         }
       }, { status: 500 });
     }
@@ -140,8 +134,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         } : undefined
       },
       artifacts: {
-        screenshots: result.artifacts?.screenshots,
-        logs: result.artifacts?.consoleLogs
+        screenshots: undefined, // Cloud Function doesn't return screenshots
+        logs: undefined
       }
     };
 
