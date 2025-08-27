@@ -335,7 +335,7 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
   };
 
   try {
-    const headless = estimateRequest.headless !== true;
+    const headless = estimateRequest.headless !== false;
     const timeoutMs = estimateRequest.timeoutMs ?? 45000;
 
     browser = await chromium.launch({
@@ -710,37 +710,41 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
       await selectComboboxOption(page, /region|location/i, inst.region);
 
       // Committed use (None | 1 year | 3 years) — could be radio or dropdown
-      console.log(`💰 FORM: Selecting committed use: ${inst.committedUse}`);
-
-      // First try radios:
-      const commitNone = page.getByRole('radio', { name: /none|no commitment/i });
-      const commit1y = page.getByRole('radio', { name: /1 ?year/i });
-      const commit3y = page.getByRole('radio', { name: /3 ?years?/i });
       const desired = inst.committedUse.toLowerCase();
+      let commitmentLabel = 'None';
+      if (desired.startsWith('1')) {
+        commitmentLabel = 'Resource-based CUD - 1 Year';
+      } else if (desired.startsWith('3')) {
+        commitmentLabel = 'Resource-based CUD - 3 Years';
+      }
 
-      console.log(`🔍 FORM: Looking for commitment radio buttons...`);
-      const noneCount = await commitNone.count();
-      const oneYearCount = await commit1y.count();
-      const threeYearCount = await commit3y.count();
-      console.log(`📊 FORM: Found ${noneCount} 'none', ${oneYearCount} '1-year', ${threeYearCount} '3-year' radio buttons`);
+      console.log(`💰 FORM: Selecting committed use: ${commitmentLabel}`);
 
+      // First, try to click a radio button with the exact name.
+      const commitRadio = page.getByRole('radio', { name: commitmentLabel, exact: true });
       let committedSelected = false;
-      if (noneCount > 0 || oneYearCount > 0 || threeYearCount > 0) {
-        const target =
-          desired === 'none' ? commitNone :
-            desired.startsWith('1') ? commit1y : commit3y;
-        if (await target.count()) {
-          console.log(`🎯 FORM: Clicking commitment radio button for: ${desired}`);
-          await target.first().click();
+
+      if (await commitRadio.count() > 0) {
+        console.log(`🎯 FORM: Found and clicking exact match radio button for: "${commitmentLabel}"`);
+        await commitRadio.first().click();
+        committedSelected = true;
+      } else {
+        // If no radio button, try a dropdown/combobox.
+        console.log(`🔄 FORM: No exact match radio button found, trying commitment dropdown`);
+        try {
+          await selectComboboxOption(page, /committed use|commitment/i, commitmentLabel);
           committedSelected = true;
+        } catch (e) {
+          console.log(`⚠️ FORM: Could not select "${commitmentLabel}" from dropdown: ${(e as Error).message}`);
         }
       }
-      if (!committedSelected) {
-        // fallback: combobox
-        console.log(`🔄 FORM: No radio buttons found, trying commitment dropdown`);
-        await selectComboboxOption(page, /committed use|commitment/i, inst.committedUse);
+
+      if (committedSelected) {
+        console.log(`✅ FORM: Commitment selected: ${commitmentLabel}`);
       } else {
-        console.log(`✅ FORM: Commitment selected via radio button`);
+        console.log(`❌ FORM: Failed to select commitment: ${commitmentLabel}. The UI may have changed.`);
+        // Decide if you want to throw an error or continue with the default (likely 'None')
+        // For now, we log an error and continue.
       }
 
       // Add to estimate (within the right-side of the form)
@@ -953,4 +957,3 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
     try { await browser?.close(); } catch { }
   }
 }
-

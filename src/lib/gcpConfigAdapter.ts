@@ -5,29 +5,6 @@ import { VmConfig } from './calculator';
 import { InstanceInput, EstimateRequest } from './gcpCalculatorAutomation';
 
 /**
- * Maps discount model names from our internal format to GCP Calculator format
- */
-function mapDiscountModelToCommittedUse(discountModel: string): 'none' | '1 year' | '3 years' {
-  switch (discountModel.toLowerCase()) {
-    case '1-year cud':
-    case '1 year cud':
-    case '1-year':
-    case '1 year':
-      return '1 year';
-    case '3-year cud':
-    case '3 year cud':
-    case '3-year':
-    case '3 years':
-      return '3 years';
-    case 'on-demand':
-    case 'spot vm':
-    case 'none':
-    default:
-      return 'none';
-  }
-}
-
-/**
  * Maps our internal discount model to provisioning model
  * Now supports both explicit provisioningModel field and legacy discountModel inference
  */
@@ -137,16 +114,16 @@ function mapMachineSeries(series: string): string {
 /**
  * Converts a single VmConfig to InstanceInput format
  */
-export function vmConfigToInstanceInput(config: VmConfig): InstanceInput {
+export function vmConfigToInstanceInput(config: VmConfig, commitment: 'none' | '1 year' | '3 years'): InstanceInput {
   return {
     numberOfInstances: config.quantity || 1,
     totalHours: config.runningHours || 730, // Default to full month if not specified
     operatingSystem: mapOperatingSystem(config.os),
-    provisioningModel: mapDiscountModelToProvisioningModel(config), // Now passes full config
+    provisioningModel: mapDiscountModelToProvisioningModel(config),
     series: mapMachineSeries(config.series),
     machineType: config.name, // e.g., e2-standard-4
     region: mapRegion(config.regionLocation),
-    committedUse: mapDiscountModelToCommittedUse(config.provisioningModel),
+    committedUse: commitment, // Use the explicitly passed commitment
     isCustom: config.isCustom,
     vCpus: config.vCpus,
     memoryGB: config.memoryGB,
@@ -163,13 +140,14 @@ export function vmConfigsToEstimateRequest(
     timeoutMs?: number;
     service?: string;
     wantCsvLink?: boolean;
-  } = {}
+    commitment: 'none' | '1 year' | '3 years'; // Commitment is now required
+  }
 ): EstimateRequest {
   return {
     headless: options.headless !== false, // Default to headless
     timeoutMs: options.timeoutMs || 45000, // Default 45 second timeout
     service: options.service || 'Compute Engine', // Default service
-    instances: configs.map(vmConfigToInstanceInput),
+    instances: configs.map(config => vmConfigToInstanceInput(config, options.commitment)),
     wantCsvLink: options.wantCsvLink || false,
   };
 }

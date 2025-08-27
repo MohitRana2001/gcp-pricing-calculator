@@ -3,9 +3,10 @@ import { VmConfig } from '@/lib/calculator';
 import { runGcpCalculatorAutomation, EstimateRequest, OutputJSON } from '@/lib/gcpCalculatorAutomation';
 import { vmConfigsToEstimateRequest, validateVmConfigsForAutomation, getAutomationErrorHelp } from '@/lib/gcpConfigAdapter';
 
-// Interface for the API request (updated to accept real VM configurations)
+// Interface for the API request
 interface GenerateUrlRequest {
-  configurations: VmConfig[]; // Array of VM configurations from spreadsheet
+  configurations: VmConfig[];
+  commitment: 'none' | '1 year' | '3 years'; // New field for specific commitment
   options?: {
     headless?: boolean;
     timeout?: number;
@@ -53,8 +54,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log(`📋 API STEP 2: Request body parsed successfully`);
     console.log(`📋 API STEP 2.1: Raw body:`, JSON.stringify(body, null, 2));
     
-    const { configurations = [], options = {} } = body;
-    console.log(`📊 API STEP 2.2: Extracted ${configurations.length} configurations and options:`, options);
+    const { configurations = [], commitment = 'none', options = {} } = body;
+    console.log(`📊 API STEP 2.2: Extracted ${configurations.length} configurations, commitment: ${commitment}, and options:`, options);
 
     console.log(`🤖 API STEP 3: Starting GCP Calculator automation for ${configurations.length} configurations`);
 
@@ -77,7 +78,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       headless: options.headless,
       timeoutMs: options.timeout,
       service: 'Compute Engine',
-      wantCsvLink: options.wantCsvLink || false
+      wantCsvLink: options.wantCsvLink || false,
+      commitment: commitment, // Pass down the specific commitment
     });
 
     // Run the advanced Playwright automation

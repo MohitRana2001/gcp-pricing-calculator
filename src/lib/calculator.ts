@@ -27,8 +27,12 @@ export interface VmConfig {
   onDemandCost: number
   savings: number
   
-  // Generated shareable link
-  shareableLink?: string
+  // Generated shareable links
+  links?: {
+    onDemand?: string;
+    oneYear?: string;
+    threeYear?: string;
+  }
 }
 
 export interface CostCalculation {

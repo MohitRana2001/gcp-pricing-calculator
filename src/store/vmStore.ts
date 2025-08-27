@@ -3,27 +3,12 @@ import { VmConfig, getMachineTypeSpecs, getAvailableMachineTypes, seriesSupports
 
 export type ServiceType = 'compute-engine' | 'cloud-storage' | 'cloud-sql' | null
 
-interface CloudStorageConfig {
-  id: string
-  name: string
-  storageClass: string
-  region: string
-  storageAmount: number // in GB
-  networkEgress: number // in GB
-  operations: number // number of operations
-  estimatedCost: number
-}
-
-interface CloudSQLConfig {
-  id: string
-  name: string
-  databaseEngine: string
-  tier: string
-  region: string
-  storage: number // in GB
-  backupStorage: number // in GB
-  estimatedCost: number
-}
+// Define loading states for each link type
+export type LinkLoadingState = {
+  onDemand: boolean;
+  oneYear: boolean;
+  threeYear: boolean;
+};
 
 interface VmStore {
   selectedService: ServiceType
@@ -32,17 +17,14 @@ interface VmStore {
   configurations: VmConfig[]
   selectedIds: Set<string>
   dataLoaded: boolean
-  
-  // Cloud Storage (placeholder for future)
-  storageConfigurations: CloudStorageConfig[]
-  
-  // Cloud SQL (placeholder for future)
-  sqlConfigurations: CloudSQLConfig[]
+  loadingLinks: Record<string, LinkLoadingState>; // To track loading state for each config's links
   
   addConfiguration: (config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>) => void
   removeConfiguration: (id: string) => void
   removeMultipleConfigurations: (ids: string[]) => void
-  updateConfiguration: (id: string, updates: Partial<VmConfig>) => void
+  updateConfiguration: (id:string, updates: Partial<VmConfig>) => void
+  setLinkLoadingState: (configId: string, linkType: keyof LinkLoadingState, isLoading: boolean) => void;
+  
   duplicateConfiguration: (id: string) => void
   duplicateMultipleConfigurations: (ids: string[]) => void
   
@@ -159,7 +141,7 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     runningHours: 730,
     quantity: 1,
     discountModel: 'On-Demand',
-    shareableLink: undefined,
+    links: {},
     ...overrides
   }
   
@@ -207,7 +189,9 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
     quantity: ['quantity', 'count', 'instances', 'num_instances'],
     os: ['os', 'operating_system', 'system'],
     sqlLicense: ['sql_license', 'sql', 'license'],
-    shareableLink: ['shareable_link', 'shareableLink', 'public_link', 'publicLink', 'gcp_link', 'gcpLink', 'calculator_link', 'calculatorLink'],
+    'links.onDemand': ['onDemandLink', 'onDemandUrl'],
+    'links.oneYear': ['oneYearLink', 'oneYearUrl', '1yrLink'],
+    'links.threeYear': ['threeYearLink', 'threeYearUrl', '3yrLink'],
   }
   
   const mapping: Record<string, string> = {}
@@ -280,7 +264,9 @@ function transformValue(value: string, targetField: string): any {
       }
       return 'none'
     
-    case 'shareableLink':
+    case 'links.onDemand':
+    case 'links.oneYear':
+    case 'links.threeYear':
       // Validate that it's a valid GCP calculator URL
       if (value && value.includes('cloud.google.com/products/calculator')) {
         return value
@@ -300,6 +286,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
   configurations: [],
   selectedIds: new Set<string>(),
   dataLoaded: false,
+  loadingLinks: {},
   
   // Cloud Storage & SQL (placeholders)
   storageConfigurations: [],
@@ -344,77 +331,12 @@ export const useVmStore = create<VmStore>((set, get) => ({
         if (config.id === id) {
           const updatedConfig = { ...config, ...updates }
           
-          if (updates.isCustom !== undefined) {
-            if (updates.isCustom === true) {
-              // When switching to custom, set machine name to "Custom"
-              updatedConfig.name = "Custom"
-            } else if (updates.isCustom === false) {
-              // When switching from custom, try to find a matching machine type
-              const matchingType = findMatchingMachineType(
-                updatedConfig.series,
-                updatedConfig.regionLocation,
-                updatedConfig.vCpus,
-                updatedConfig.memoryGB
-              )
-              
-              if (matchingType) {
-                updatedConfig.name = matchingType.name
-                updatedConfig.description = matchingType.description
-                updatedConfig.cpuPlatform = matchingType.cpuPlatform
-                updatedConfig.onDemandPerHour = matchingType.onDemandPerHour
-                updatedConfig.cudOneYearPerHour = matchingType.cudOneYearPerHour
-                updatedConfig.cudThreeYearPerHour = matchingType.cudThreeYearPerHour
-                updatedConfig.spotPerHour = matchingType.spotPerHour
-              } else {
-                // If no matching type found, keep it custom
-                updatedConfig.isCustom = true
-                updatedConfig.name = "Custom"
-              }
-            }
-          }
-          
-          // Note: vCPU and memory change detection is handled at the component level
-          // to avoid conflicts and ensure proper user experience
-          
-          if (updates.series && updates.series !== config.series) {
-            const availableTypes = getAvailableMachineTypes(updates.series, updatedConfig.regionLocation)
-            if (availableTypes.length > 0 && !updatedConfig.isCustom) {
-              const firstType = availableTypes[0]
-              updatedConfig.name = firstType.name
-              updatedConfig.vCpus = firstType.vCpus
-              updatedConfig.memoryGB = firstType.memoryGB
-              updatedConfig.onDemandPerHour = firstType.onDemandPerHour
-              updatedConfig.cudOneYearPerHour = firstType.cudOneYearPerHour
-              updatedConfig.cudThreeYearPerHour = firstType.cudThreeYearPerHour
-              updatedConfig.spotPerHour = firstType.spotPerHour
-            }
-          }
-          
-          // Handle region change
-          if (updates.regionLocation && updates.regionLocation !== config.regionLocation) {
-            const availableTypes = getAvailableMachineTypes(updatedConfig.series, updates.regionLocation)
-            if (availableTypes.length > 0 && !updatedConfig.isCustom) {
-              const matchingType = availableTypes.find(t => t.name === updatedConfig.name) || availableTypes[0]
-              updatedConfig.name = matchingType.name
-              updatedConfig.vCpus = matchingType.vCpus
-              updatedConfig.memoryGB = matchingType.memoryGB
-              updatedConfig.onDemandPerHour = matchingType.onDemandPerHour
-              updatedConfig.cudOneYearPerHour = matchingType.cudOneYearPerHour
-              updatedConfig.cudThreeYearPerHour = matchingType.cudThreeYearPerHour
-              updatedConfig.spotPerHour = matchingType.spotPerHour
-            }
-          }
-          
-          // Validate custom memory if in custom mode
-          if (updatedConfig.isCustom && (updates.vCpus || updates.memoryGB)) {
-            if (seriesSupportsExtendedMemory(updatedConfig.series)) {
-              const memoryRange = getAllowedMemoryRange(updatedConfig.series, updatedConfig.vCpus)
-              if (updatedConfig.memoryGB < memoryRange.min) {
-                updatedConfig.memoryGB = memoryRange.min
-              } else if (updatedConfig.memoryGB > memoryRange.max) {
-                updatedConfig.memoryGB = memoryRange.max
-              }
-            }
+          // Clear links if a core configuration property changes
+          const coreProps: (keyof VmConfig)[] = ['name', 'series', 'regionLocation', 'vCpus', 'memoryGB', 'os', 'sqlLicense', 'provisioningModel', 'runningHours', 'quantity'];
+          const hasCoreChange = coreProps.some(prop => prop in updates && updates[prop] !== config[prop]);
+
+          if (hasCoreChange) {
+            updatedConfig.links = {};
           }
           
           const costs = calculateCosts(updatedConfig)
@@ -429,10 +351,22 @@ export const useVmStore = create<VmStore>((set, get) => ({
     }))
   },
 
+  setLinkLoadingState: (configId, linkType, isLoading) => {
+    set(state => ({
+      loadingLinks: {
+        ...state.loadingLinks,
+        [configId]: {
+          ...state.loadingLinks[configId],
+          [linkType]: isLoading,
+        },
+      },
+    }));
+  },
+
   duplicateConfiguration: (id) => {
     const config = get().configurations.find((c) => c.id === id)
     if (config) {
-      const newConfig = { ...config }
+      const newConfig = { ...config, links: {} } // Clear links on duplication
       delete (newConfig as any).id
       delete (newConfig as any).estimatedCost
       delete (newConfig as any).onDemandCost
@@ -476,51 +410,25 @@ export const useVmStore = create<VmStore>((set, get) => ({
     }
 
     const headers = [
-      'Name',
-      'Series',
-      'Family',
-      'Description',
-      'Region Location',
-      'vCPUs',
-      'CPU Platform',
-      'Memory (GB)',
-      'Is Custom',
-      'Running Hours',
-      'Quantity',
-      'Provisioning Model',
-      'On-Demand Per Hour ($)',
-      'CUD 1-Year Per Hour ($)',
-      'CUD 3-Year Per Hour ($)',
-      'Spot Per Hour ($)',
-      'Estimated Cost ($)',
-      'On-Demand Cost ($)',
-      'Savings ($)',
-      'Public Shareable Link'
-    ]
+      'Name', 'Series', 'Family', 'Description', 'Region Location', 'vCPUs', 
+      'CPU Platform', 'Memory (GB)', 'Is Custom', 'Running Hours', 'Quantity', 
+      'Provisioning Model', 'On-Demand Per Hour ($)', 'CUD 1-Year Per Hour ($)', 
+      'CUD 3-Year Per Hour ($)', 'Spot Per Hour ($)', 'Estimated Cost ($)', 
+      'On-Demand Cost ($)', 'Savings ($)', 'On-Demand Link', '1-Year CUD Link', '3-Year CUD Link'
+    ];
 
     const csvContent = [
       headers.join(','),
       ...configs.map(config => [
-        config.name,
-        config.series,
-        config.family,
-        config.description,
-        config.regionLocation,
-        config.vCpus,
-        config.cpuPlatform,
-        config.memoryGB,
-        config.isCustom,
-        config.runningHours,
-        config.quantity,
+        config.name, config.series, config.family, config.description,
+        config.regionLocation, config.vCpus, config.cpuPlatform, config.memoryGB,
+        config.isCustom, config.runningHours, config.quantity,
         config.provisioningModel || (config.provisioningModel === 'spot' ? 'spot' : 'regular'),
-        config.onDemandPerHour,
-        config.cudOneYearPerHour,
-        config.cudThreeYearPerHour,
-        config.spotPerHour,
-        config.estimatedCost,
-        config.onDemandCost,
-        config.savings,
-        config.shareableLink || ''
+        config.onDemandPerHour, config.cudOneYearPerHour, config.cudThreeYearPerHour,
+        config.spotPerHour, config.estimatedCost, config.onDemandCost, config.savings,
+        config.links?.onDemand || '',
+        config.links?.oneYear || '',
+        config.links?.threeYear || ''
       ].join(','))
     ].join('\n')
 
@@ -542,7 +450,13 @@ export const useVmStore = create<VmStore>((set, get) => ({
         if (row[sourceHeader]) {
           const transformedValue = transformValue(row[sourceHeader], targetField)
           if (transformedValue !== null) {
-            mappedConfig[targetField] = transformedValue
+            if (targetField.startsWith('links.')) {
+                const key = targetField.split('.')[1] as keyof VmConfig['links'];
+                if (!mappedConfig.links) mappedConfig.links = {};
+                mappedConfig.links[key] = transformedValue;
+            } else {
+                mappedConfig[targetField] = transformedValue;
+            }
           }
         }
       }
@@ -609,8 +523,4 @@ export const useVmStore = create<VmStore>((set, get) => ({
   getTotalServicesCost: () => {
     return get().getComputeEngineCost() + get().getCloudStorageCost() + get().getCloudSQLCost()
   },
-})) 
-
-// Example of how to use the store:
-// const { configurations, addConfiguration } = useVmStore.getState()
-// addConfiguration({ region: 'us-east1', ... })
+}))

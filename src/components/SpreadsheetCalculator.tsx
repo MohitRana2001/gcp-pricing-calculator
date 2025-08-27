@@ -2,20 +2,18 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Trash2, Plus, Settings, ExternalLink } from "lucide-react";
-import { useVmStore } from "@/store/vmStore";
+import { Copy, Trash2, Plus, Settings, ExternalLink, Loader2 } from "lucide-react";
+import { useVmStore, LinkLoadingState } from "@/store/vmStore";
 import {
   REGIONS,
   MACHINE_SERIES,
-  MACHINE_FAMILIES,
+  VmConfig,
   seriesSupportsExtendedMemory,
   getAllowedMemoryRange,
   getAvailableMachineTypes,
   getPricing,
-  PricingDetails,
   findMatchingMachineType,
 } from "@/lib/calculator";
-import { generateGcpCalculatorUrl } from "@/lib/gcpUrlGenerator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,11 +31,14 @@ interface EditingCell {
   field: string;
 }
 
+type CommitmentType = 'none' | '1 year' | '3 years';
+
 export default function SpreadsheetCalculator() {
   const {
     configurations,
     selectedIds,
     dataLoaded,
+    loadingLinks,
     addConfiguration,
     removeConfiguration,
     updateConfiguration,
@@ -48,6 +49,7 @@ export default function SpreadsheetCalculator() {
     exportToCSV,
     importFromCSV,
     initializeData,
+    setLinkLoadingState,
   } = useVmStore();
 
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
@@ -101,8 +103,51 @@ export default function SpreadsheetCalculator() {
     field: string,
     value: string | number | boolean
   ) => {
-    updateConfiguration(configId, { [field]: value, shareableLink: undefined });
+    updateConfiguration(configId, { [field]: value });
   };
+
+  const handleGenerateLink = async (config: VmConfig, commitment: CommitmentType) => {
+    const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
+      'none': 'onDemand',
+      '1 year': 'oneYear',
+      '3 years': 'threeYear',
+    };
+    const linkType = linkTypeMap[commitment];
+
+    setLinkLoadingState(config.id, linkType, true);
+    try {
+      const response = await fetch('/api/generate-gcp-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          configurations: [config],
+          commitment: commitment,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate link');
+      }
+
+      const result = await response.json();
+      if (result.success && result.shareUrl) {
+        const linkUpdate = {
+            ...config.links,
+            [linkType]: result.shareUrl,
+        };
+        updateConfiguration(config.id, { links: linkUpdate });
+      } else {
+        throw new Error(result.error || 'API did not return a shareable URL.');
+      }
+    } catch (error) {
+      console.error(`Failed to generate ${commitment} link:`, error);
+      alert(`Error generating link: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLinkLoadingState(config.id, linkType, false);
+    }
+  };
+
 
   const handleVcpuMemoryChange = (
     configId: string,
@@ -134,7 +179,6 @@ export default function SpreadsheetCalculator() {
         cudOneYearPerHour: matchingType.cudOneYearPerHour,
         cudThreeYearPerHour: matchingType.cudThreeYearPerHour,
         spotPerHour: matchingType.spotPerHour,
-        shareableLink: undefined,
       });
     } else {
       // No matching type found, set to custom
@@ -142,7 +186,6 @@ export default function SpreadsheetCalculator() {
         [field]: value,
         isCustom: true,
         name: "Custom",
-        shareableLink: undefined,
       });
     }
   };
@@ -333,7 +376,13 @@ export default function SpreadsheetCalculator() {
                   3-Year CUD Inclusive
                 </th>
                 <th className="min-w-[200px] p-3 text-left font-semibold">
-                  Public Shareable Link
+                  On-Demand Link
+                </th>
+                <th className="min-w-[200px] p-3 text-left font-semibold">
+                  1-Year CUD Link
+                </th>
+                <th className="min-w-[200px] p-3 text-left font-semibold">
+                  3-Year CUD Link
                 </th>
               </tr>
             </thead>
@@ -346,6 +395,8 @@ export default function SpreadsheetCalculator() {
                     config.regionLocation
                   );
                   const pricing = getPricing(config);
+                  const currentLoading = loadingLinks[config.id] || { onDemand: false, oneYear: false, threeYear: false };
+
                   return (
                     <motion.tr
                       key={config.id}
@@ -385,40 +436,6 @@ export default function SpreadsheetCalculator() {
                             onClick={() => removeConfiguration(config.id)}
                           >
                             <Trash2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={async () => {
-                              try {
-                                const { generateGcpCalculatorUrl } =
-                                  await import("@/lib/gcpUrlGenerator");
-                                const url = await generateGcpCalculatorUrl([
-                                  config,
-                                ]);
-
-                                // Update the configuration with the generated link
-                                updateConfiguration(config.id, {
-                                  shareableLink: url,
-                                });
-
-                                // Open the URL in a new tab
-                                window.open(url, "_blank");
-                              } catch (error) {
-                                console.error(
-                                  "Failed to generate GCP URL:",
-                                  error
-                                );
-                                // Fallback to opening the calculator manually
-                                window.open(
-                                  "https://cloud.google.com/products/calculator",
-                                  "_blank"
-                                );
-                              }
-                            }}
-                          >
-                            <ExternalLink className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
@@ -471,12 +488,10 @@ export default function SpreadsheetCalculator() {
                                 cudThreeYearPerHour:
                                   firstType.cudThreeYearPerHour,
                                 spotPerHour: firstType.spotPerHour,
-                                shareableLink: undefined,
                               });
                             } else {
                               updateConfiguration(config.id, {
                                 series: value,
-                                shareableLink: undefined,
                               });
                             }
                           }}
@@ -504,7 +519,6 @@ export default function SpreadsheetCalculator() {
                               updateConfiguration(config.id, {
                                 isCustom: true,
                                 name: "Custom",
-                                shareableLink: undefined,
                               });
                             } else {
                               const matchingType = findMatchingMachineType(
@@ -526,7 +540,6 @@ export default function SpreadsheetCalculator() {
                                   cudThreeYearPerHour:
                                     matchingType.cudThreeYearPerHour,
                                   spotPerHour: matchingType.spotPerHour,
-                                  shareableLink: undefined,
                                 });
                               } else {
                                 const availableTypes = getAvailableMachineTypes(
@@ -548,7 +561,6 @@ export default function SpreadsheetCalculator() {
                                     cudThreeYearPerHour:
                                       firstType.cudThreeYearPerHour,
                                     spotPerHour: firstType.spotPerHour,
-                                    shareableLink: undefined,
                                   });
                                 }
                               }
@@ -567,7 +579,6 @@ export default function SpreadsheetCalculator() {
                               updateConfiguration(config.id, {
                                 isCustom: true,
                                 name: "Custom",
-                                shareableLink: undefined,
                               });
                             } else {
                               const selectedType = availableTypes.find(
@@ -587,7 +598,6 @@ export default function SpreadsheetCalculator() {
                                   cudThreeYearPerHour:
                                     selectedType.cudThreeYearPerHour,
                                   spotPerHour: selectedType.spotPerHour,
-                                  shareableLink: undefined,
                                 });
                               }
                             }
@@ -855,7 +865,6 @@ export default function SpreadsheetCalculator() {
                           onValueChange={(value) => {
                             updateConfiguration(config.id, {
                               provisioningModel: value as any,
-                              shareableLink: undefined,
                             });
                           }}
                         >
@@ -939,69 +948,17 @@ export default function SpreadsheetCalculator() {
                         </div>
                       </td>
 
-                      {/* Public Shareable Link */}
+                      {/* On-Demand Link */}
                       <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          {config.shareableLink ? (
-                            <>
-                              <a
-                                href={config.shareableLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline text-sm truncate"
-                                title={config.shareableLink}
-                                style={{ maxWidth: '150px' }}
-                              >
-                                {config.shareableLink}
-                              </a>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 flex-shrink-0"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(
-                                    config.shareableLink!
-                                  );
-                                }}
-                                title="Copy link"
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8"
-                              onClick={async () => {
-                                try {
-                                  const { generateGcpCalculatorUrl } =
-                                    await import("@/lib/gcpUrlGenerator");
-                                  const url = await generateGcpCalculatorUrl([
-                                    config,
-                                  ]);
-
-                                  // Update the configuration with the generated link
-                                  updateConfiguration(config.id, {
-                                    shareableLink: url,
-                                  });
-                                } catch (error) {
-                                  console.error(
-                                    "Failed to generate GCP URL:",
-                                    error
-                                  );
-                                  // Fallback to opening the calculator manually
-                                  window.open(
-                                    "https://cloud.google.com/products/calculator",
-                                    "_blank"
-                                  );
-                                }
-                              }}
-                            >
-                              Generate Link
-                            </Button>
-                          )}
-                        </div>
+                        <LinkCell config={config} commitment="none" loading={currentLoading.onDemand} onGenerate={handleGenerateLink} />
+                      </td>
+                      {/* 1-Year CUD Link */}
+                      <td className="p-3">
+                        <LinkCell config={config} commitment="1 year" loading={currentLoading.oneYear} onGenerate={handleGenerateLink} />
+                      </td>
+                      {/* 3-Year CUD Link */}
+                      <td className="p-3">
+                        <LinkCell config={config} commitment="3 years" loading={currentLoading.threeYear} onGenerate={handleGenerateLink} />
                       </td>
                     </motion.tr>
                   );
@@ -1030,5 +987,67 @@ export default function SpreadsheetCalculator() {
         )}
       </div>
     </div>
+  );
+}
+
+// Helper component for the link cells
+function LinkCell({
+  config,
+  commitment,
+  loading,
+  onGenerate,
+}: {
+  config: VmConfig;
+  commitment: CommitmentType;
+  loading: boolean;
+  onGenerate: (config: VmConfig, commitment: CommitmentType) => void;
+}) {
+  const linkTypeMap: Record<CommitmentType, keyof VmConfig['links']> = {
+      'none': 'onDemand',
+      '1 year': 'oneYear',
+      '3 years': 'threeYear',
+  };
+  const link = config.links?.[linkTypeMap[commitment]];
+
+  if (link) {
+    return (
+      <div className="flex items-center gap-2">
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:underline text-sm truncate"
+          title={link}
+          style={{ maxWidth: '150px' }}
+        >
+          View Link
+        </a>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0"
+          onClick={() => navigator.clipboard.writeText(link)}
+          title="Copy link"
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-8"
+      disabled={loading}
+      onClick={() => onGenerate(config, commitment)}
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        "Generate"
+      )}
+    </Button>
   );
 }
