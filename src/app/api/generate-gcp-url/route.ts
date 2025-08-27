@@ -7,10 +7,12 @@ import { vmConfigsToEstimateRequest, validateVmConfigsForAutomation, getAutomati
 interface GenerateUrlRequest {
   configurations: VmConfig[];
   commitment: 'none' | '1 year' | '3 years'; // New field for specific commitment
+  parallel?: boolean; // New field for parallel generation
   options?: {
     headless?: boolean;
     timeout?: number;
     wantCsvLink?: boolean;
+    debug?: boolean; // Add debug mode
   };
 }
 
@@ -54,8 +56,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log(`📋 API STEP 2: Request body parsed successfully`);
     console.log(`📋 API STEP 2.1: Raw body:`, JSON.stringify(body, null, 2));
     
-    const { configurations = [], commitment = 'none', options = {} } = body;
-    console.log(`📊 API STEP 2.2: Extracted ${configurations.length} configurations, commitment: ${commitment}, and options:`, options);
+    const { configurations = [], commitment = 'none', parallel = false, options = {} } = body;
+    console.log(`📊 API STEP 2.2: Extracted ${configurations.length} configurations, commitment: ${commitment}, parallel: ${parallel}, and options:`, options);
+
+    // Environment diagnostics for VM debugging
+    console.log(`🔍 ENV DIAGNOSTICS: Node version: ${process.version}`);
+    console.log(`🔍 ENV DIAGNOSTICS: Platform: ${process.platform}`);
+    console.log(`🔍 ENV DIAGNOSTICS: Architecture: ${process.arch}`);
+    console.log(`🔍 ENV DIAGNOSTICS: Memory usage:`, process.memoryUsage());
+    console.log(`🔍 ENV DIAGNOSTICS: Environment variables:`, {
+      NODE_ENV: process.env.NODE_ENV,
+      PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH,
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD,
+      DISPLAY: process.env.DISPLAY,
+      CHROME_BIN: process.env.CHROME_BIN,
+    });
 
     console.log(`🤖 API STEP 3: Starting GCP Calculator automation for ${configurations.length} configurations`);
 
@@ -73,20 +88,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }, { status: 400 });
     }
 
-    // Convert VmConfigs to EstimateRequest format
+    // Convert VmConfigs to EstimateRequest format with enhanced VM options
     const estimateRequest = vmConfigsToEstimateRequest(configurations, {
-      headless: options.headless,
-      timeoutMs: options.timeout,
+      headless: options.headless !== false, // Default to true for VM environments
+      timeoutMs: options.timeout || 60000, // Increase timeout for VM environments
       service: 'Compute Engine',
       wantCsvLink: options.wantCsvLink || false,
       commitment: commitment, // Pass down the specific commitment
+      debug: options.debug || false,
     });
 
-    // Run the advanced Playwright automation
+    // Run the advanced Playwright automation with VM-optimized settings
     console.log('🎭 Running advanced Playwright automation...');
     const result: OutputJSON = await runGcpCalculatorAutomation({
       ...estimateRequest,
-      collectArtifacts: false, // do not store artifacts in production per requirement
+      collectArtifacts: options.debug || false, // Collect artifacts in debug mode
+      vmOptimized: true, // Flag for VM-specific optimizations
     });
 
     if (!result.success) {

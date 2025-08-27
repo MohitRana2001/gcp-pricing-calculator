@@ -2,7 +2,14 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Trash2, Plus, Settings, ExternalLink, Loader2 } from "lucide-react";
+import {
+  Copy,
+  Trash2,
+  Plus,
+  Settings,
+  ExternalLink,
+  Loader2,
+} from "lucide-react";
 import { useVmStore, LinkLoadingState } from "@/store/vmStore";
 import {
   REGIONS,
@@ -31,7 +38,7 @@ interface EditingCell {
   field: string;
 }
 
-type CommitmentType = 'none' | '1 year' | '3 years';
+type CommitmentType = "none" | "1 year" | "3 years";
 
 export default function SpreadsheetCalculator() {
   const {
@@ -106,48 +113,171 @@ export default function SpreadsheetCalculator() {
     updateConfiguration(configId, { [field]: value });
   };
 
-  const handleGenerateLink = async (config: VmConfig, commitment: CommitmentType) => {
+  const handleGenerateLink = async (
+    config: VmConfig,
+    commitment: CommitmentType,
+    enableDebug: boolean = false
+  ) => {
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
-      'none': 'onDemand',
-      '1 year': 'oneYear',
-      '3 years': 'threeYear',
+      none: "onDemand",
+      "1 year": "oneYear",
+      "3 years": "threeYear",
     };
     const linkType = linkTypeMap[commitment];
 
     setLinkLoadingState(config.id, linkType, true);
     try {
-      const response = await fetch('/api/generate-gcp-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/generate-gcp-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           configurations: [config],
           commitment: commitment,
+          options: {
+            debug: enableDebug,
+            timeout: 60000, // Increased timeout for VM environments
+          },
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate link');
+        throw new Error(errorData.error || "Failed to generate link");
       }
 
       const result = await response.json();
       if (result.success && result.shareUrl) {
         const linkUpdate = {
-            ...config.links,
-            [linkType]: result.shareUrl,
+          ...config.links,
+          [linkType]: result.shareUrl,
         };
         updateConfiguration(config.id, { links: linkUpdate });
       } else {
-        throw new Error(result.error || 'API did not return a shareable URL.');
+        throw new Error(result.error || "API did not return a shareable URL.");
       }
     } catch (error) {
       console.error(`Failed to generate ${commitment} link:`, error);
-      alert(`Error generating link: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      alert(
+        `Error generating link: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     } finally {
       setLinkLoadingState(config.id, linkType, false);
     }
   };
 
+  // Parallel link generation for all commitment types
+  const handleGenerateAllLinks = async (
+    config: VmConfig,
+    enableDebug: boolean = false
+  ) => {
+    const commitmentTypes: CommitmentType[] = ["none", "1 year", "3 years"];
+    const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
+      none: "onDemand",
+      "1 year": "oneYear",
+      "3 years": "threeYear",
+    };
+
+    // Set all loading states to true
+    commitmentTypes.forEach((commitment) => {
+      setLinkLoadingState(config.id, linkTypeMap[commitment], true);
+    });
+
+    try {
+      // Generate all links in parallel
+      const promises = commitmentTypes.map(async (commitment) => {
+        try {
+          const response = await fetch("/api/generate-gcp-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              configurations: [config],
+              commitment: commitment,
+              options: {
+                debug: enableDebug,
+                timeout: 60000,
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to generate link");
+          }
+
+          const result = await response.json();
+          if (result.success && result.shareUrl) {
+            return { commitment, url: result.shareUrl, success: true };
+          } else {
+            throw new Error(
+              result.error || "API did not return a shareable URL."
+            );
+          }
+        } catch (error) {
+          console.error(`Failed to generate ${commitment} link:`, error);
+          return {
+            commitment,
+            url: null,
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      });
+
+      // Wait for all requests to complete
+      const results = await Promise.all(promises);
+
+      // Update links based on results
+      const linkUpdates: Partial<VmConfig["links"]> = { ...config.links };
+      let successCount = 0;
+      let errorMessages: string[] = [];
+
+      results.forEach((result) => {
+        const linkType = linkTypeMap[result.commitment];
+        if (result.success && result.url) {
+          (linkUpdates as any)[linkType] = result.url;
+          successCount++;
+        } else {
+          errorMessages.push(
+            `${result.commitment}: ${result.error || "Failed"}`
+          );
+        }
+      });
+
+      // Update configuration with successful links
+      if (successCount > 0) {
+        updateConfiguration(config.id, { links: linkUpdates });
+      }
+
+      // Show summary
+      if (successCount === commitmentTypes.length) {
+        alert(`✅ Successfully generated all ${successCount} links!`);
+      } else if (successCount > 0) {
+        alert(
+          `⚠️ Generated ${successCount}/${
+            commitmentTypes.length
+          } links. Errors: ${errorMessages.join("; ")}`
+        );
+      } else {
+        alert(
+          `❌ Failed to generate any links. Errors: ${errorMessages.join("; ")}`
+        );
+      }
+    } catch (error) {
+      console.error("Error in parallel link generation:", error);
+      alert(
+        `Error generating links: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      // Clear all loading states
+      commitmentTypes.forEach((commitment) => {
+        setLinkLoadingState(config.id, linkTypeMap[commitment], false);
+      });
+    }
+  };
 
   const handleVcpuMemoryChange = (
     configId: string,
@@ -395,7 +525,11 @@ export default function SpreadsheetCalculator() {
                     config.regionLocation
                   );
                   const pricing = getPricing(config);
-                  const currentLoading = loadingLinks[config.id] || { onDemand: false, oneYear: false, threeYear: false };
+                  const currentLoading = loadingLinks[config.id] || {
+                    onDemand: false,
+                    oneYear: false,
+                    threeYear: false,
+                  };
 
                   return (
                     <motion.tr
@@ -426,14 +560,44 @@ export default function SpreadsheetCalculator() {
                             size="icon"
                             className="h-8 w-8"
                             onClick={() => duplicateConfiguration(config.id)}
+                            title="Duplicate configuration"
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700"
+                            onClick={() => handleGenerateAllLinks(config)}
+                            title="Generate all links in parallel"
+                            disabled={
+                              currentLoading.onDemand ||
+                              currentLoading.oneYear ||
+                              currentLoading.threeYear
+                            }
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-orange-600 hover:text-orange-700"
+                            onClick={() => handleGenerateAllLinks(config, true)}
+                            title="Generate all links with debug mode"
+                            disabled={
+                              currentLoading.onDemand ||
+                              currentLoading.oneYear ||
+                              currentLoading.threeYear
+                            }
+                          >
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
                             onClick={() => removeConfiguration(config.id)}
+                            title="Delete configuration"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -950,15 +1114,30 @@ export default function SpreadsheetCalculator() {
 
                       {/* On-Demand Link */}
                       <td className="p-3">
-                        <LinkCell config={config} commitment="none" loading={currentLoading.onDemand} onGenerate={handleGenerateLink} />
+                        <LinkCell
+                          config={config}
+                          commitment="none"
+                          loading={currentLoading.onDemand}
+                          onGenerate={handleGenerateLink}
+                        />
                       </td>
                       {/* 1-Year CUD Link */}
                       <td className="p-3">
-                        <LinkCell config={config} commitment="1 year" loading={currentLoading.oneYear} onGenerate={handleGenerateLink} />
+                        <LinkCell
+                          config={config}
+                          commitment="1 year"
+                          loading={currentLoading.oneYear}
+                          onGenerate={handleGenerateLink}
+                        />
                       </td>
                       {/* 3-Year CUD Link */}
                       <td className="p-3">
-                        <LinkCell config={config} commitment="3 years" loading={currentLoading.threeYear} onGenerate={handleGenerateLink} />
+                        <LinkCell
+                          config={config}
+                          commitment="3 years"
+                          loading={currentLoading.threeYear}
+                          onGenerate={handleGenerateLink}
+                        />
                       </td>
                     </motion.tr>
                   );
@@ -1002,10 +1181,10 @@ function LinkCell({
   loading: boolean;
   onGenerate: (config: VmConfig, commitment: CommitmentType) => void;
 }) {
-  const linkTypeMap: Record<CommitmentType, keyof VmConfig['links']> = {
-      'none': 'onDemand',
-      '1 year': 'oneYear',
-      '3 years': 'threeYear',
+  const linkTypeMap = {
+    none: "onDemand" as const,
+    "1 year": "oneYear" as const,
+    "3 years": "threeYear" as const,
   };
   const link = config.links?.[linkTypeMap[commitment]];
 
@@ -1018,7 +1197,7 @@ function LinkCell({
           rel="noopener noreferrer"
           className="text-blue-600 hover:underline text-sm truncate"
           title={link}
-          style={{ maxWidth: '150px' }}
+          style={{ maxWidth: "150px" }}
         >
           View Link
         </a>
@@ -1043,11 +1222,7 @@ function LinkCell({
       disabled={loading}
       onClick={() => onGenerate(config, commitment)}
     >
-      {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : (
-        "Generate"
-      )}
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate"}
     </Button>
   );
 }

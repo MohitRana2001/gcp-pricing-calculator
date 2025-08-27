@@ -13,36 +13,36 @@ export type LinkLoadingState = {
 interface VmStore {
   selectedService: ServiceType
   setSelectedService: (service: ServiceType) => void
-  
+
   configurations: VmConfig[]
   selectedIds: Set<string>
   dataLoaded: boolean
   loadingLinks: Record<string, LinkLoadingState>; // To track loading state for each config's links
-  
+
   addConfiguration: (config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>) => void
   removeConfiguration: (id: string) => void
   removeMultipleConfigurations: (ids: string[]) => void
-  updateConfiguration: (id:string, updates: Partial<VmConfig>) => void
+  updateConfiguration: (id: string, updates: Partial<VmConfig>) => void
   setLinkLoadingState: (configId: string, linkType: keyof LinkLoadingState, isLoading: boolean) => void;
-  
+
   duplicateConfiguration: (id: string) => void
   duplicateMultipleConfigurations: (ids: string[]) => void
-  
+
   toggleSelection: (id: string) => void
   selectAll: () => void
   clearSelection: () => void
-  
+
   exportToCSV: () => void
   importFromCSV: (csvData: string) => Promise<void>
   intelligentCSVMapping: (csvData: string) => Promise<any[]>
-  
+
   initializeData: () => Promise<void>
-  
+
   getTotalConfigurations: () => number
   getAverageCost: () => number
   getTotalSavings: () => number
   getTotalMonthlyCost: () => number
-  
+
   getComputeEngineCost: () => number
   getCloudStorageCost: () => number
   getCloudSQLCost: () => number
@@ -69,24 +69,24 @@ function calculateCosts(config: any): {
     sqlLicense: config.sqlLicense || 'none', // Default to none if not provided
     provisioningModel: config.provisioningModel || 'regular',
   } as VmConfig
-  
+
   const pricing = getPricing(completeConfig)
-  
+
   // Calculate total costs considering quantity and running hours
   const baseOnDemandMonthly = pricing.onDemand * (config.quantity || 1)
   const baseCud1yMonthly = pricing.cud1y * (config.quantity || 1)
   const baseCud3yMonthly = pricing.cud3y * (config.quantity || 1)
-  
+
   // If running hours is different from 730 (full month), calculate proportionally
   const hourlyFactor = (config.runningHours || 730) / 730
-  
+
   const onDemandCost = baseOnDemandMonthly * hourlyFactor
   const cud1yCost = baseCud1yMonthly * hourlyFactor
   const cud3yCost = baseCud3yMonthly * hourlyFactor
-  
+
   let estimatedCost: number
   let savings: number
-  
+
   // Calculate estimated cost based on discount model and provisioning model
   const discountModel = config.discountModel || 'On-Demand'
   const provisioningModel = config.provisioningModel || (discountModel === 'Spot VM' ? 'spot' : 'regular')
@@ -112,7 +112,7 @@ function calculateCosts(config: any): {
       }
       break
   }
-  
+
   return {
     estimatedCost: Math.round(estimatedCost * 100) / 100,
     onDemandCost: Math.round(onDemandCost * 100) / 100,
@@ -144,7 +144,7 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     links: {},
     ...overrides
   }
-  
+
   return defaults
 }
 
@@ -163,7 +163,7 @@ function downloadCSV(content: string, filename: string) {
 function parseCSV(csvData: string): any[] {
   const lines = csvData.trim().split('\n')
   const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-  
+
   return lines.slice(1).map(line => {
     const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
     const obj: any = {}
@@ -193,53 +193,53 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
     'links.oneYear': ['oneYearLink', 'oneYearUrl', '1yrLink'],
     'links.threeYear': ['threeYearLink', 'threeYearUrl', '3yrLink'],
   }
-  
+
   const mapping: Record<string, string> = {}
-  
+
   for (const [targetField, aliases] of Object.entries(fieldMappings)) {
     for (const header of csvHeaders) {
       const normalizedHeader = header.toLowerCase().replace(/[\s_-]/g, '')
-      
+
       for (const alias of aliases) {
         const normalizedAlias = alias.toLowerCase().replace(/[\s_-]/g, '')
-        
+
         if (normalizedHeader.includes(normalizedAlias) || normalizedAlias.includes(normalizedHeader)) {
           mapping[targetField] = header
           break
         }
       }
-      
+
       if (mapping[targetField]) break
     }
   }
-  
+
   return mapping
 }
 
 // Smart data transformation
 function transformValue(value: string, targetField: string): any {
   if (!value || value === '') return null
-  
+
   switch (targetField) {
     case 'vCpus':
     case 'memoryGB':
     case 'runningHours':
     case 'quantity':
       return parseInt(value) || (targetField === 'quantity' ? 1 : 0)
-    
+
     case 'onDemandPerHour':
     case 'cudOneYearPerHour':
     case 'cudThreeYearPerHour':
     case 'spotPerHour':
       return parseFloat(value) || 0
-    
+
     case 'series':
       const seriesValue = value.toLowerCase()
       if (['c4', 'c3', 'c3d', 'e2', 'n1', 'n2', 'n2d', 'n4', 'm1', 'm2', 'm3', 't2d'].includes(seriesValue)) {
         return seriesValue
       }
       return 'e2'
-    
+
     case 'regionLocation':
       const regionValue = value.toLowerCase().replace(/[\s_-]/g, '')
       if (regionValue.includes('mumbai') || regionValue.includes('asia-south1')) return 'mumbai'
@@ -249,21 +249,21 @@ function transformValue(value: string, targetField: string): any {
       if (regionValue.includes('europe') || regionValue.includes('eu')) return 'europe-west1'
       if (regionValue.includes('asia')) return 'asia-southeast1'
       return 'us-central1'
-    
+
     case 'os':
       const osValue = value.toLowerCase()
       if (['windows', 'rhel', 'rhel_sap', 'sles', 'sles_sap'].includes(osValue)) {
         return osValue
       }
       return 'linux'
-    
+
     case 'sqlLicense':
       const sqlValue = value.toLowerCase()
       if (['standard', 'enterprise', 'web'].includes(sqlValue)) {
         return sqlValue
       }
       return 'none'
-    
+
     case 'links.onDemand':
     case 'links.oneYear':
     case 'links.threeYear':
@@ -272,7 +272,7 @@ function transformValue(value: string, targetField: string): any {
         return value
       }
       return undefined
-    
+
     default:
       return value
   }
@@ -281,13 +281,13 @@ function transformValue(value: string, targetField: string): any {
 export const useVmStore = create<VmStore>((set, get) => ({
   selectedService: null,
   setSelectedService: (service: ServiceType) => set({ selectedService: service }),
-  
+
   // Compute Engine
   configurations: [],
   selectedIds: new Set<string>(),
   dataLoaded: false,
   loadingLinks: {},
-  
+
   // Cloud Storage & SQL (placeholders)
   storageConfigurations: [],
   sqlConfigurations: [],
@@ -305,7 +305,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
       id,
       ...costs
     }
-    
+
     set((state) => ({
       configurations: [...state.configurations, fullConfig],
     }))
@@ -330,7 +330,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
       configurations: state.configurations.map((config) => {
         if (config.id === id) {
           const updatedConfig = { ...config, ...updates }
-          
+
           // Clear links if a core configuration property changes
           const coreProps: (keyof VmConfig)[] = ['name', 'series', 'regionLocation', 'vCpus', 'memoryGB', 'os', 'sqlLicense', 'provisioningModel', 'runningHours', 'quantity'];
           const hasCoreChange = coreProps.some(prop => prop in updates && updates[prop] !== config[prop]);
@@ -338,12 +338,12 @@ export const useVmStore = create<VmStore>((set, get) => ({
           if (hasCoreChange) {
             updatedConfig.links = {};
           }
-          
+
           const costs = calculateCosts(updatedConfig)
           updatedConfig.estimatedCost = costs.estimatedCost
           updatedConfig.onDemandCost = costs.onDemandCost
           updatedConfig.savings = costs.savings
-          
+
           return updatedConfig
         }
         return config
@@ -371,7 +371,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
       delete (newConfig as any).estimatedCost
       delete (newConfig as any).onDemandCost
       delete (newConfig as any).savings
-      
+
       get().addConfiguration(newConfig)
     }
   },
@@ -410,10 +410,10 @@ export const useVmStore = create<VmStore>((set, get) => ({
     }
 
     const headers = [
-      'Name', 'Series', 'Family', 'Description', 'Region Location', 'vCPUs', 
-      'CPU Platform', 'Memory (GB)', 'Is Custom', 'Running Hours', 'Quantity', 
-      'Provisioning Model', 'On-Demand Per Hour ($)', 'CUD 1-Year Per Hour ($)', 
-      'CUD 3-Year Per Hour ($)', 'Spot Per Hour ($)', 'Estimated Cost ($)', 
+      'Name', 'Series', 'Family', 'Description', 'Region Location', 'vCPUs',
+      'CPU Platform', 'Memory (GB)', 'Is Custom', 'Running Hours', 'Quantity',
+      'Provisioning Model', 'On-Demand Per Hour ($)', 'CUD 1-Year Per Hour ($)',
+      'CUD 3-Year Per Hour ($)', 'Spot Per Hour ($)', 'Estimated Cost ($)',
       'On-Demand Cost ($)', 'Savings ($)', 'On-Demand Link', '1-Year CUD Link', '3-Year CUD Link'
     ];
 
@@ -439,31 +439,31 @@ export const useVmStore = create<VmStore>((set, get) => ({
   intelligentCSVMapping: async (csvData: string) => {
     const parsedData = parseCSV(csvData)
     if (parsedData.length === 0) return []
-    
+
     const headers = Object.keys(parsedData[0])
     const fieldMapping = await intelligentFieldMapping(headers)
-    
+
     return parsedData.map(row => {
       const mappedConfig: any = {}
-      
+
       for (const [targetField, sourceHeader] of Object.entries(fieldMapping)) {
         if (row[sourceHeader]) {
           const transformedValue = transformValue(row[sourceHeader], targetField)
           if (transformedValue !== null) {
             if (targetField.startsWith('links.')) {
-                const key = targetField.split('.')[1] as keyof VmConfig['links'];
-                if (!mappedConfig.links) mappedConfig.links = {};
-                mappedConfig.links[key] = transformedValue;
+              const key = targetField.split('.')[1] as keyof VmConfig['links'];
+              if (!mappedConfig.links) mappedConfig.links = {};
+              mappedConfig.links[key] = transformedValue;
             } else {
-                mappedConfig[targetField] = transformedValue;
+              mappedConfig[targetField] = transformedValue;
             }
           }
         }
       }
-      
+
       const defaultConfig = createDefaultConfiguration()
       const finalConfig = { ...defaultConfig, ...mappedConfig }
-      
+
       return finalConfig
     })
   },
@@ -471,11 +471,11 @@ export const useVmStore = create<VmStore>((set, get) => ({
   importFromCSV: async (csvData: string) => {
     try {
       const mappedConfigurations = await get().intelligentCSVMapping(csvData)
-      
+
       mappedConfigurations.forEach(config => get().addConfiguration(config))
-      
+
       alert(`Successfully imported ${mappedConfigurations.length} configurations with intelligent field mapping!`)
-      
+
     } catch (error) {
       console.error('Error importing CSV:', error)
       alert('Error importing CSV file. Please check the format and try again.')

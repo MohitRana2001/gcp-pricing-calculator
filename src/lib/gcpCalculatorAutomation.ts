@@ -24,6 +24,8 @@ export type EstimateRequest = {
   instances: InstanceInput[];
   wantCsvLink?: boolean;
   collectArtifacts?: boolean;
+  debug?: boolean;
+  vmOptimized?: boolean; // New flag for VM-specific optimizations
 };
 
 export type OutputJSON = {
@@ -323,7 +325,7 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
 
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
-  let page: Page;
+  let page!: Page; // Definite assignment assertion - we know it will be assigned before use
 
   const out: OutputJSON = {
     success: false,
@@ -337,16 +339,50 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
   try {
     const headless = estimateRequest.headless !== false;
     const timeoutMs = estimateRequest.timeoutMs ?? 45000;
+    const vmOptimized = estimateRequest.vmOptimized || false;
+
+    // VM-optimized browser launch args
+    const browserArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage', // Overcome limited resource problems in VM
+      '--disable-gpu', // Disable GPU hardware acceleration
+      '--disable-web-security', // Disable web security for better compatibility
+      '--disable-features=VizDisplayCompositor', // Disable compositor
+      '--no-first-run', // Skip first run setup
+      '--no-default-browser-check', // Skip default browser check
+      '--disable-background-timer-throttling', // Disable background tab throttling
+      '--disable-backgrounding-occluded-windows', // Disable background occlusion
+      '--disable-renderer-backgrounding', // Disable renderer backgrounding
+      '--disable-ipc-flooding-protection', // Disable IPC flooding protection
+    ];
+
+    // Add VM-specific optimizations
+    if (vmOptimized) {
+      browserArgs.push(
+        '--memory-pressure-off', // Disable memory pressure detection
+        '--max_old_space_size=4096', // Increase memory limit
+        '--disable-extensions', // Disable extensions
+        '--disable-plugins', // Disable plugins
+        '--disable-background-mode', // Disable background mode
+        '--disable-hang-monitor', // Disable hang monitor
+      );
+    }
+
+    console.log(`🔧 BROWSER: Launching with args:`, browserArgs);
 
     browser = await chromium.launch({
       headless,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: browserArgs,
+      timeout: 30000, // 30 second launch timeout
     });
     context = await browser.newContext({
       recordHar: collectArtifacts && networkHarPath ? { path: networkHarPath, content: 'embed' } : undefined,
       viewport: { width: 1440, height: 1000 },
-      userAgent: 'Mozilla/5.0 (Playwright-Automation)',
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       locale: 'en-US',
+      ignoreHTTPSErrors: true, // Ignore HTTPS errors in VM environments
+      bypassCSP: true, // Bypass Content Security Policy
     });
 
     page = await context.newPage();
@@ -948,12 +984,64 @@ export async function runGcpCalculatorAutomation(estimateRequest: EstimateReques
 
     return out;
   } catch (err: any) {
+    console.error('❌ AUTOMATION ERROR:', err);
+    console.error('❌ ERROR STACK:', err?.stack);
+    console.error('❌ ERROR DETAILS:', {
+      name: err?.name,
+      message: err?.message,
+      code: err?.code,
+    });
+
+    // Capture error screenshot if possible
+    if (collectArtifacts) {
+      try {
+        // Only attempt screenshot if page was successfully created
+        if (page && typeof page.screenshot === 'function') {
+          const errorPng = path.join(ART_DIR, 'error-screenshot.png');
+          await page.screenshot({ path: errorPng, fullPage: true });
+          if (out.artifacts && out.artifacts.screenshots) {
+            out.artifacts.screenshots.lastError = errorPng;
+          }
+          console.log(`📸 ERROR: Screenshot captured at ${errorPng}`);
+        }
+      } catch (screenshotErr) {
+        console.log(`⚠️ ERROR: Could not capture error screenshot:`, screenshotErr);
+      }
+    }
+
     out.success = false;
     out.error = err?.message || String(err);
+    
+    // Enhanced error messages for common VM issues
+    if (err?.message?.includes('net::ERR_NETWORK_CHANGED')) {
+      out.error = 'Network connectivity issue in VM environment. Check internet connection and DNS settings.';
+    } else if (err?.message?.includes('Browser closed unexpectedly')) {
+      out.error = 'Browser crashed - likely due to insufficient memory or missing dependencies. Try increasing VM memory.';
+    } else if (err?.message?.includes('timeout')) {
+      out.error = 'Operation timed out - VM may be under heavy load or network is slow. Try increasing timeout values.';
+    } else if (err?.message?.includes('Failed to launch browser')) {
+      out.error = 'Failed to launch browser - check if all Playwright dependencies are installed with: npx playwright install-deps';
+    }
+
     return out;
   } finally {
-    try { consoleStream?.end(); } catch { }
-    try { await context?.close(); } catch { }
-    try { await browser?.close(); } catch { }
+    try { 
+      consoleStream?.end(); 
+      console.log('📝 CLEANUP: Console stream closed');
+    } catch (e) { 
+      console.log('⚠️ CLEANUP: Error closing console stream:', e);
+    }
+    try { 
+      await context?.close(); 
+      console.log('🌐 CLEANUP: Browser context closed');
+    } catch (e) { 
+      console.log('⚠️ CLEANUP: Error closing context:', e);
+    }
+    try { 
+      await browser?.close(); 
+      console.log('🔧 CLEANUP: Browser closed');
+    } catch (e) { 
+      console.log('⚠️ CLEANUP: Error closing browser:', e);
+    }
   }
 }

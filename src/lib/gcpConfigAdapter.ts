@@ -141,6 +141,7 @@ export function vmConfigsToEstimateRequest(
     service?: string;
     wantCsvLink?: boolean;
     commitment: 'none' | '1 year' | '3 years'; // Commitment is now required
+    debug?: boolean; // Add debug parameter
   }
 ): EstimateRequest {
   return {
@@ -149,6 +150,7 @@ export function vmConfigsToEstimateRequest(
     service: options.service || 'Compute Engine', // Default service
     instances: configs.map(config => vmConfigToInstanceInput(config, options.commitment)),
     wantCsvLink: options.wantCsvLink || false,
+    debug: options.debug || false, // Include debug parameter
   };
 }
 
