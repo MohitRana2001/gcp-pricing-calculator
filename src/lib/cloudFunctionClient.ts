@@ -4,8 +4,8 @@
 import { VmConfig } from './calculator';
 
 // Cloud Function configuration
-const CLOUD_FUNCTION_URL = process.env.GCP_CALCULATOR_FUNCTION_URL || 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/gcp-calculator-automation';
-const CLOUD_FUNCTION_TIMEOUT = 600000; // 10 minutes
+const CLOUD_FUNCTION_URL = process.env.GCP_CALCULATOR_FUNCTION_URL || 'https://us-central1-ps-apprentice.cloudfunctions.net/gcp-calculator-automation';
+const CLOUD_FUNCTION_TIMEOUT = 300000; // 5 minutes (Cloud Run can be slower on cold start)
 
 // Types for Cloud Function communication
 export interface CloudFunctionRequest {
@@ -50,26 +50,62 @@ export interface CloudFunctionResponse {
 
 // Helper function to get authentication token
 async function getAuthToken(): Promise<string | null> {
-  // In production, this should use service account credentials
-  // For now, we'll use environment variable or return null for unauthenticated calls
-  
-  if (process.env.GCP_ACCESS_TOKEN) {
-    return process.env.GCP_ACCESS_TOKEN;
+  // Method 1: Try to get identity token (best for Cloud Run)
+  if (process.env.GOOGLE_CLOUD_PROJECT) {
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      
+      console.log('🔑 Getting identity token for Cloud Run...');
+      const { stdout } = await execAsync('gcloud auth print-identity-token');
+      const token = stdout.trim();
+      
+      if (token && token.length > 50) {
+        console.log('✅ Successfully obtained identity token');
+        return token;
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not get identity token, trying fallback methods:', error);
+    }
   }
   
-  // If running on GCP, try to get token from metadata server
+  // Method 2: Try to use google-auth-library to get identity token
   if (process.env.GOOGLE_CLOUD_PROJECT) {
     try {
       const { GoogleAuth } = await import('google-auth-library');
-      const auth = new GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
-      });
-      const authClient = await auth.getClient();
-      const token = await authClient.getAccessToken();
-      return token.token;
+      const auth = new GoogleAuth();
+      const client = await auth.getIdTokenClient(CLOUD_FUNCTION_URL);
+      const response = await client.getRequestHeaders();
+      const authHeader = response.Authorization;
+      
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+        console.log('✅ Successfully obtained identity token from auth library');
+        return token;
+      }
     } catch (error) {
-      console.warn('⚠️ Could not get GCP auth token:', error);
-      return null;
+      console.warn('⚠️ Could not get identity token from auth library:', error);
+    }
+  }
+  
+  // Method 3: Fallback - try access token (may not work for Cloud Run)
+  if (process.env.GOOGLE_CLOUD_PROJECT) {
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      
+      console.log('🔑 Fallback: Getting access token...');
+      const { stdout } = await execAsync('gcloud auth print-access-token');
+      const token = stdout.trim();
+      
+      if (token && token.length > 50) {
+        console.log('⚠️ Using access token as fallback (may not work for Cloud Run)');
+        return token;
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not get access token:', error);
     }
   }
   
@@ -128,17 +164,24 @@ export async function callGcpCalculatorCloudFunction(
       headers['Authorization'] = `Bearer ${authToken}`;
       console.log('🔐 Using authenticated request');
     } else {
-      console.log('⚠️ Making unauthenticated request (may fail if function requires auth)');
+      console.error('❌ No authentication token available - request will likely fail');
+      throw new Error('Authentication required but no token available. Please run: gcloud auth login');
     }
 
     // Call the Cloud Function
     console.log(`🚀 Calling Cloud Function: ${CLOUD_FUNCTION_URL}`);
+    console.log(`⏱️ Timeout set to: ${CLOUD_FUNCTION_TIMEOUT}ms`);
+    
+    const startTime = Date.now();
     const response = await fetch(CLOUD_FUNCTION_URL, {
       method: 'POST',
       headers,
       body: JSON.stringify(requestPayload),
       signal: AbortSignal.timeout(CLOUD_FUNCTION_TIMEOUT)
     });
+    
+    const duration = Date.now() - startTime;
+    console.log(`⏱️ Request completed in ${duration}ms`);
 
     console.log(`📥 Response status: ${response.status} ${response.statusText}`);
 
@@ -212,13 +255,18 @@ export async function callCloudFunctionForAllCommitments(
   const responses = await Promise.all(promises);
 
   // Process results
+  const commitmentMap: Record<string, 'onDemand' | 'oneYear' | 'threeYear'> = {
+    'none': 'onDemand',
+    '1 year': 'oneYear',
+    '3 years': 'threeYear'
+  };
+
   responses.forEach(response => {
-    if (response.success && 'result' in response) {
-      const key = response.commitment === 'none' ? 'onDemand' : 
-                  response.commitment === '1 year' ? 'oneYear' : 'threeYear';
-      results[key] = response.result;
-    } else if ('error' in response) {
-      errors[response.commitment] = response.error;
+    const key = commitmentMap[response.commitment];
+    if (response.success && key) {
+      results[key] = response.result as CloudFunctionResponse;
+    } else {
+      errors[response.commitment] = response.error || 'Unknown error';
     }
   });
 
