@@ -38,7 +38,7 @@ interface EditingCell {
   field: string;
 }
 
-type CommitmentType = "none" | "1 year" | "3 years";
+type CommitmentType = "none" | "1-year" | "3-year";
 
 export default function SpreadsheetCalculator() {
   const {
@@ -120,13 +120,14 @@ export default function SpreadsheetCalculator() {
   ) => {
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
       none: "onDemand",
-      "1 year": "oneYear",
-      "3 years": "threeYear",
+      "1-year": "oneYear",
+      "3-year": "threeYear",
     };
     const linkType = linkTypeMap[commitment];
 
     setLinkLoadingState(config.id, linkType, true);
     try {
+      console.log(`🔗 Generating ${commitment} link for ${config.name}...`);
       const response = await fetch("/api/generate-gcp-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -152,6 +153,7 @@ export default function SpreadsheetCalculator() {
           [linkType]: result.shareUrl,
         };
         updateConfiguration(config.id, { links: linkUpdate });
+        console.log(`✅ Successfully generated ${commitment} link for ${config.name}`);
       } else {
         throw new Error(result.error || "API did not return a shareable URL.");
       }
@@ -172,11 +174,11 @@ export default function SpreadsheetCalculator() {
     config: VmConfig,
     enableDebug: boolean = false
   ) => {
-    const commitmentTypes: CommitmentType[] = ["none", "1 year", "3 years"];
+    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-year"];
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
       none: "onDemand",
-      "1 year": "oneYear",
-      "3 years": "threeYear",
+      "1-year": "oneYear",
+      "3-year": "threeYear",
     };
 
     // Set all loading states to true
@@ -188,6 +190,7 @@ export default function SpreadsheetCalculator() {
       // Generate all links in parallel
       const promises = commitmentTypes.map(async (commitment) => {
         try {
+          console.log(`🔗 Generating ${commitment} link for ${config.name}...`);
           const response = await fetch("/api/generate-gcp-url", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -346,6 +349,156 @@ export default function SpreadsheetCalculator() {
     }
   };
 
+  // Bulk link generation for selected configurations
+  const handleGenerateBulkLinks = async (enableDebug: boolean = false) => {
+    const selectedConfigs = configurations.filter(config => selectedIds.has(config.id));
+    
+    if (selectedConfigs.length === 0) {
+      alert("Please select at least one configuration to generate bulk links.");
+      return;
+    }
+
+    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-year"];
+    const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
+      none: "onDemand",
+      "1-year": "oneYear",
+      "3-year": "threeYear",
+    };
+
+    // Set loading states for all selected configs
+    selectedConfigs.forEach(config => {
+      commitmentTypes.forEach((commitment) => {
+        setLinkLoadingState(config.id, linkTypeMap[commitment], true);
+      });
+    });
+
+    try {
+      console.log(`🚀 Starting bulk link generation for ${selectedConfigs.length} configurations...`);
+      
+      // Create all promises for parallel execution
+      const allPromises = selectedConfigs.flatMap(config => 
+        commitmentTypes.map(async (commitment) => {
+          try {
+            const response = await fetch("/api/generate-gcp-url", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                configurations: [config],
+                commitment: commitment,
+                options: {
+                  debug: enableDebug,
+                  timeout: 60000,
+                },
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || "Failed to generate link");
+            }
+
+            const result = await response.json();
+            if (result.success && result.shareUrl) {
+              return { 
+                configId: config.id, 
+                commitment, 
+                url: result.shareUrl, 
+                success: true,
+                configName: config.name
+              };
+            } else {
+              throw new Error(result.error || "API did not return a shareable URL.");
+            }
+          } catch (error) {
+            console.error(`Failed to generate ${commitment} link for ${config.name}:`, error);
+            return {
+              configId: config.id,
+              commitment,
+              url: null,
+              success: false,
+              error: error instanceof Error ? error.message : "Unknown error",
+              configName: config.name
+            };
+          }
+        })
+      );
+
+      // Execute all promises in parallel
+      console.log(`📡 Executing ${allPromises.length} parallel requests...`);
+      const results = await Promise.all(allPromises);
+
+      // Process results and update configurations
+      const linkUpdates: Record<string, Partial<VmConfig["links"]>> = {};
+      let totalSuccessCount = 0;
+      let totalErrorCount = 0;
+      const errorsByConfig: Record<string, string[]> = {};
+
+      results.forEach((result) => {
+        const linkType = linkTypeMap[result.commitment];
+        
+        if (!linkUpdates[result.configId]) {
+          linkUpdates[result.configId] = {};
+        }
+
+        if (result.success && result.url) {
+          (linkUpdates[result.configId] as any)[linkType] = result.url;
+          totalSuccessCount++;
+        } else {
+          if (!errorsByConfig[result.configId]) {
+            errorsByConfig[result.configId] = [];
+          }
+          errorsByConfig[result.configId].push(`${result.commitment}: ${result.error || "Failed"}`);
+          totalErrorCount++;
+        }
+      });
+
+      // Update all configurations with successful links
+      Object.entries(linkUpdates).forEach(([configId, links]) => {
+        const config = configurations.find(c => c.id === configId);
+        if (config && links && Object.keys(links).length > 0) {
+          updateConfiguration(configId, { 
+            links: { ...config.links, ...links } 
+          });
+        }
+      });
+
+      // Show detailed summary
+      const totalRequests = selectedConfigs.length * commitmentTypes.length;
+      if (totalSuccessCount === totalRequests) {
+        alert(`🎉 Bulk generation complete! Successfully generated all ${totalSuccessCount} links for ${selectedConfigs.length} configurations.`);
+      } else if (totalSuccessCount > 0) {
+        const errorDetails = Object.entries(errorsByConfig).map(([configId, errors]) => {
+          const config = configurations.find(c => c.id === configId);
+          return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
+        }).join('\n');
+        
+        alert(`⚠️ Bulk generation completed with partial success!\n\n✅ Success: ${totalSuccessCount}/${totalRequests} links\n❌ Errors: ${totalErrorCount}\n\nError details:\n${errorDetails}`);
+      } else {
+        const errorDetails = Object.entries(errorsByConfig).map(([configId, errors]) => {
+          const config = configurations.find(c => c.id === configId);
+          return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
+        }).join('\n');
+        
+        alert(`❌ Bulk generation failed for all configurations.\n\nError details:\n${errorDetails}`);
+      }
+
+    } catch (error) {
+      console.error("Error in bulk link generation:", error);
+      alert(
+        `Error in bulk link generation: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      // Clear all loading states
+      selectedConfigs.forEach(config => {
+        commitmentTypes.forEach((commitment) => {
+          setLinkLoadingState(config.id, linkTypeMap[commitment], false);
+        });
+      });
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -388,6 +541,16 @@ export default function SpreadsheetCalculator() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Bulk Generation Button */}
+          <Button
+            variant="default"
+            onClick={() => handleGenerateBulkLinks()}
+            disabled={selectedIds.size === 0}
+            className="flex items-center gap-2"
+          >
+            Generate Bulk Links
+          </Button>
+          
           <input
             ref={fileInputRef}
             type="file"
@@ -1125,7 +1288,7 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <LinkCell
                           config={config}
-                          commitment="1 year"
+                          commitment="1-year"
                           loading={currentLoading.oneYear}
                           onGenerate={handleGenerateLink}
                         />
@@ -1134,7 +1297,7 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <LinkCell
                           config={config}
-                          commitment="3 years"
+                          commitment="3-year"
                           loading={currentLoading.threeYear}
                           onGenerate={handleGenerateLink}
                         />
@@ -1183,8 +1346,8 @@ function LinkCell({
 }) {
   const linkTypeMap = {
     none: "onDemand" as const,
-    "1 year": "oneYear" as const,
-    "3 years": "threeYear" as const,
+    "1-year": "oneYear" as const,
+    "3-year": "threeYear" as const,
   };
   const link = config.links?.[linkTypeMap[commitment]];
 

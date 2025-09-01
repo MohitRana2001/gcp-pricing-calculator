@@ -5,11 +5,23 @@ import path from 'path';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { configurations } = body;
+    const { configurations, commitment = "none" } = body;
     
     // We'll use the first configuration from the spreadsheet row
     const config = configurations[0];
-    console.log(config);
+    console.log('Configuration received:', config);
+    console.log('Commitment type:', commitment);
+    
+    // Enhanced config to ensure all required fields are present
+    const enhancedConfig = {
+      ...config,
+      os: config.os || 'linux',
+      provisioningModel: config.provisioningModel || 'regular',
+      runningHours: config.runningHours || 730,
+      quantity: config.quantity || 1
+    };
+
+    console.log('Enhanced configuration:', enhancedConfig);
     
     // IMPORTANT: Construct the full path to your Python script
     const scriptPath = path.join(process.cwd(), 'python_scripts', 'generate_link.py');
@@ -18,7 +30,7 @@ export async function POST(req: NextRequest) {
     const runPythonScript = new Promise<string>((resolve, reject) => {
       const pythonProcess = spawn('python3', [
         scriptPath,
-        JSON.stringify(config),
+        JSON.stringify(enhancedConfig),
       ]);
 
       let shareUrl = '';

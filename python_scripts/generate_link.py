@@ -52,6 +52,32 @@ def generate_single_link(auth_token, f_sid, bl_version, config):
         # 6. Region
         modified_freq = modified_freq.replace('[\\"us-central1\\"],\\"Region\\"', f'[\\"{config["regionLocation"]}\\"],\\"Region\\"')
 
+        # 7. Operating System (OS)
+        if "os" in config:
+            os_mapping = {
+                "linux": "free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license",
+                "windows": "windows-server",
+                "rhel": "paid-red-hat-enterprise-linux",
+                "rhel_sap": "paid-red-hat-enterprise-linux-for-sap-with-ha-and-update-services",
+                "sles": "paid-sles",
+                "sles_sap": "paid-sles-12-for-sap",
+                "ubuntu_pro": "paid-ubuntu-pro"
+            }
+            os_value = os_mapping.get(config["os"], "free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license")
+            modified_freq = modified_freq.replace('[\\"free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license\\"]', f'[\\"{os_value}\\"]')
+
+        # 8. Provisioning Model
+        if "provisioningModel" in config:
+            provisioning_value = config["provisioningModel"]
+            modified_freq = modified_freq.replace('[\\"regular\\"]', f'[\\"{provisioning_value}\\"]')
+
+        # 9. Running Hours (Instance-time)
+        if "runningHours" in config:
+            modified_freq = modified_freq.replace(
+                ',[null,null,null,null,4,null,null,7,null,730],\\"Instance-time\\"',
+                f',[null,null,null,null,4,null,null,7,null,{config["runningHours"]}],\\"Instance-time\\"'
+            )
+
         # --- STEP 2: MAKE THE API CALL ---
         print("--> Submitting intelligently modified data...", file=sys.stderr)
         request_url = "https://cloud.google.com/_/GoogleCloudUxWebAppCgcUi/data/batchexecute"
