@@ -17,7 +17,7 @@ BL_VERSION = os.getenv("BL_VERSION")
 def generate_single_link(auth_token, f_sid, bl_version, config):
     try:
         # --- STEP 1: INTELLIGENTLY MODIFY THE "GOLDEN REQUEST" TEMPLATE ---
-        print("--> Modifying template with full config...")
+        print("--> Modifying template with full config...", file=sys.stderr)
         
         # This is a template from a default e2-standard-2 instance.
         # We will replace all its key values with the data from your config.
@@ -53,7 +53,7 @@ def generate_single_link(auth_token, f_sid, bl_version, config):
         modified_freq = modified_freq.replace('[\\"us-central1\\"],\\"Region\\"', f'[\\"{config["regionLocation"]}\\"],\\"Region\\"')
 
         # --- STEP 2: MAKE THE API CALL ---
-        print("--> Submitting intelligently modified data...")
+        print("--> Submitting intelligently modified data...", file=sys.stderr)
         request_url = "https://cloud.google.com/_/GoogleCloudUxWebAppCgcUi/data/batchexecute"
         params = {
             'rpcids': 'jUj4td', 'source-path': '/products/calculator', 'f.sid': f_sid,
@@ -75,7 +75,7 @@ def generate_single_link(auth_token, f_sid, bl_version, config):
 
     # --- STEP 3: PARSE RESPONSE AND BUILD FINAL URL ---
     try:
-        print("--> Parsing response and building the final URL...")
+        print("--> Parsing response and building the final URL...", file=sys.stderr)
         response_text = response.text
         json_start_index = response_text.find('[')
         clean_response_text = response_text[json_start_index:]

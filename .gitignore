@@ -44,3 +44,4 @@ yarn-error.log*
 next-env.d.ts 
 
 python_scripts/__pycache__/
+python_scripts/venv/
