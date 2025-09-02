@@ -38,7 +38,7 @@ interface EditingCell {
   field: string;
 }
 
-type CommitmentType = "none" | "1-year" | "3-year";
+type CommitmentType = "none" | "1-year" | "3-years";
 
 export default function SpreadsheetCalculator() {
   const {
@@ -94,6 +94,7 @@ export default function SpreadsheetCalculator() {
       os: "linux",
       sqlLicense: "none",
       provisioningModel: "regular",
+      commitment: "none",
     });
   };
 
@@ -121,18 +122,25 @@ export default function SpreadsheetCalculator() {
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
       none: "onDemand",
       "1-year": "oneYear",
-      "3-year": "threeYear",
+      "3-years": "threeYear",
     };
     const linkType = linkTypeMap[commitment];
 
     setLinkLoadingState(config.id, linkType, true);
     try {
       console.log(`🔗 Generating ${commitment} link for ${config.name}...`);
+      
+      // Create an enhanced config with the commitment information
+      const configWithCommitment = {
+        ...config,
+        commitment: commitment
+      };
+      
       const response = await fetch("/api/generate-gcp-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          configurations: [config],
+          configurations: [configWithCommitment],
           commitment: commitment,
           options: {
             debug: enableDebug,
@@ -174,11 +182,11 @@ export default function SpreadsheetCalculator() {
     config: VmConfig,
     enableDebug: boolean = false
   ) => {
-    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-year"];
+    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-years"];
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
       none: "onDemand",
       "1-year": "oneYear",
-      "3-year": "threeYear",
+      "3-years": "threeYear",
     };
 
     // Set all loading states to true
@@ -191,11 +199,18 @@ export default function SpreadsheetCalculator() {
       const promises = commitmentTypes.map(async (commitment) => {
         try {
           console.log(`🔗 Generating ${commitment} link for ${config.name}...`);
+          
+          // Create an enhanced config with the commitment information
+          const configWithCommitment = {
+            ...config,
+            commitment: commitment
+          };
+          
           const response = await fetch("/api/generate-gcp-url", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              configurations: [config],
+              configurations: [configWithCommitment],
               commitment: commitment,
               options: {
                 debug: enableDebug,
@@ -318,7 +333,7 @@ export default function SpreadsheetCalculator() {
       updateConfiguration(configId, {
         [field]: value,
         isCustom: true,
-        name: "Custom",
+        name: "custom",
       });
     }
   };
@@ -358,11 +373,11 @@ export default function SpreadsheetCalculator() {
       return;
     }
 
-    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-year"];
+    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-years"];
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
       none: "onDemand",
       "1-year": "oneYear",
-      "3-year": "threeYear",
+      "3-years": "threeYear",
     };
 
     // Set loading states for all selected configs
@@ -379,11 +394,17 @@ export default function SpreadsheetCalculator() {
       const allPromises = selectedConfigs.flatMap(config => 
         commitmentTypes.map(async (commitment) => {
           try {
+            // Create an enhanced config with the commitment information
+            const configWithCommitment = {
+              ...config,
+              commitment: commitment
+            };
+            
             const response = await fetch("/api/generate-gcp-url", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                configurations: [config],
+                configurations: [configWithCommitment],
                 commitment: commitment,
                 options: {
                   debug: enableDebug,
@@ -845,7 +866,7 @@ export default function SpreadsheetCalculator() {
                             if (isChecked) {
                               updateConfiguration(config.id, {
                                 isCustom: true,
-                                name: "Custom",
+                                name: "custom",
                               });
                             } else {
                               const matchingType = findMatchingMachineType(
@@ -902,10 +923,10 @@ export default function SpreadsheetCalculator() {
                           value={config.name}
                           disabled={config.isCustom}
                           onValueChange={(value) => {
-                            if (value === "Custom") {
+                            if (value === "custom") {
                               updateConfiguration(config.id, {
                                 isCustom: true,
-                                name: "Custom",
+                                name: "custom",
                               });
                             } else {
                               const selectedType = availableTypes.find(
@@ -934,7 +955,7 @@ export default function SpreadsheetCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Custom">Custom</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
                             {availableTypes.map((type) => (
                               <SelectItem key={type.name} value={type.name}>
                                 {type.name}
@@ -1297,7 +1318,7 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <LinkCell
                           config={config}
-                          commitment="3-year"
+                          commitment="3-years"
                           loading={currentLoading.threeYear}
                           onGenerate={handleGenerateLink}
                         />
@@ -1347,7 +1368,7 @@ function LinkCell({
   const linkTypeMap = {
     none: "onDemand" as const,
     "1-year": "oneYear" as const,
-    "3-year": "threeYear" as const,
+    "3-years": "threeYear" as const,
   };
   const link = config.links?.[linkTypeMap[commitment]];
 

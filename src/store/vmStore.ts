@@ -141,6 +141,7 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     runningHours: 730,
     quantity: 1,
     discountModel: 'On-Demand',
+    commitment: 'none', // Default commitment
     links: {},
     ...overrides
   }

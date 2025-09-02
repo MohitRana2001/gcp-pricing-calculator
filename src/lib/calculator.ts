@@ -26,7 +26,8 @@ export interface VmConfig {
   estimatedCost: number
   onDemandCost: number
   savings: number
-  
+  commitment: string;
+
   // Generated shareable links
   links?: {
     onDemand?: string;

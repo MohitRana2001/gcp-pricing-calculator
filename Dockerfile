@@ -18,8 +18,6 @@ RUN npm ci --only=production
 
 # ---- Playwright layer (browsers + OS deps) ----
 FROM deps AS pw
-# Install Playwright dependencies for browser automation
-RUN npx playwright install-deps && npx playwright install chromium
 
 # ---- Build ----
 FROM pw AS builder
@@ -32,7 +30,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY python_scripts/requirements.txt ./python_scripts/
-RUN pip3 install --no-cache-dir -r python_scripts/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r python_scripts/requirements.txt
 
 # Create unprivileged user
 RUN addgroup --system --gid 1001 nodejs \

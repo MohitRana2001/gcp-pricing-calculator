@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
     const config = configurations[0];
     console.log('Configuration received:', config);
     console.log('Commitment type:', commitment);
+    console.log('Config commitment field:', config.commitment);
     
     // Enhanced config to ensure all required fields are present
     const enhancedConfig = {
@@ -18,7 +19,8 @@ export async function POST(req: NextRequest) {
       os: config.os || 'linux',
       provisioningModel: config.provisioningModel || 'regular',
       runningHours: config.runningHours || 730,
-      quantity: config.quantity || 1
+      quantity: config.quantity || 1,
+      commitment: commitment // Add commitment to the config
     };
 
     console.log('Enhanced configuration:', enhancedConfig);
