@@ -27,6 +27,7 @@ export interface VmConfig {
   onDemandCost: number
   savings: number
   commitment: string;
+  extendedMemoryEnabled?: boolean;
 
   // Generated shareable links
   links?: {
@@ -136,6 +137,33 @@ export const MEMORY_CONFIGS: Record<string, { minMemoryPerVcpu: number; maxMemor
   'm3': { minMemoryPerVcpu: 30.5, maxMemoryPerVcpu: 30.5, supportsExtendedMemory: false },
   't2d': { minMemoryPerVcpu: 1, maxMemoryPerVcpu: 4, supportsExtendedMemory: false }
 }
+
+const EXTENDED_MEMORY_PRICING: Record<string, Record<string, number>> = {
+  n4: {
+    "us-central1": 0.005379,
+    "us-east1": 0.005379,
+    "us-west1": 0.005379,
+    "mumbai": 0.007531,
+  },
+  n2: {
+    "us-central1": 0.0066,
+    "us-east1": 0.0066,
+    "us-west1": 0.0066,
+    "mumbai": 0.00924,
+  },
+  n2d: {
+    "us-central1": 0.0053,
+    "us-east1": 0.0053,
+    "us-west1": 0.0053,
+    "mumbai": 0.00742,
+  },
+  n1: {
+    "us-central1": 0.0049,
+    "us-east1": 0.0049,
+    "us-west1": 0.0049,
+    "mumbai": 0.00686,
+  },
+};
 
 // Check if a series supports extended/custom memory
 export function seriesSupportsExtendedMemory(series: string): boolean {
@@ -333,9 +361,26 @@ export function getPricing(config: VmConfig): PricingDetails {
     }
   }
 
-  const onDemandInclusive = onDemand + osOnDemand + sqlLicenseCost;
-  const cud1yInclusive = cud1y + os1yCud + sqlLicenseCost;
-  const cud3yInclusive = cud3y + os3yCud + sqlLicenseCost;
+  let extendedMemoryCost = 0;
+
+  if (config.extendedMemoryEnabled && seriesSupportsExtendedMemory(config.series)) {
+    const seriesConfig = MEMORY_CONFIGS[config.series];
+    const seriesPricing = EXTENDED_MEMORY_PRICING[config.series];
+
+    if (seriesConfig && seriesPricing && seriesPricing[config.regionLocation]) {
+      const standardMemoryLimit = config.vCpus * seriesConfig.maxMemoryPerVcpu;
+
+      if (config.memoryGB > standardMemoryLimit) {
+        const extraMemoryGB = config.memoryGB - standardMemoryLimit;
+        const costPerGbHour = seriesPricing[config.regionLocation];
+        extendedMemoryCost = extraMemoryGB * costPerGbHour * config.runningHours;
+      }
+    }
+  }
+
+  const onDemandInclusive = onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCost;
+  const cud1yInclusive = cud1y + os1yCud + sqlLicenseCost + extendedMemoryCost;
+  const cud3yInclusive = cud3y + os3yCud + sqlLicenseCost + extendedMemoryCost;
 
   return {
     onDemand,
