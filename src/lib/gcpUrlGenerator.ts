@@ -440,6 +440,7 @@ export function getMockVmConfigs(): VmConfig[] {
       estimatedCost: 49,
       onDemandCost: 49,
       savings: 0,
+      commitment: "none"
     },
   ];
 } 
