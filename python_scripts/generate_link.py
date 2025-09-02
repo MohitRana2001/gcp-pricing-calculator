@@ -53,19 +53,40 @@ def generate_single_link(auth_token, f_sid, bl_version, config):
         modified_freq = modified_freq.replace('[\\"us-central1\\"],\\"Region\\"', f'[\\"{config["regionLocation"]}\\"],\\"Region\\"')
 
         # 7. Operating System (OS)
-        if "os" in config:
+        final_os_value = "free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license"
+        
+        # Check for SQL license first, as it takes priority
+        sql_license = config.get("sqlLicense", "none")
+        
+        if sql_license and sql_license != "none":
+            # If a SQL license is chosen, it determines the OS
+            sql_license_mapping = {
+                "express": "paid-windows-server-sql-server-enterprise",
+                "standard": "paid-sql-server-standard-2012-2014-2016-2017-2019",
+                "web": "paid-sql-server-web-2012-2014-2016-2017-2019",
+                "enterprise": "paid-sql-server-enterprise-2012-2014-2016-2017-2019",
+            }
+            final_os_value = sql_license_mapping.get(sql_license)
+        else:
+            # If no SQL license, fall back to the regular OS mapping
+            os = config.get("os", "linux")
             os_mapping = {
                 "linux": "free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license",
-                "windows": "windows-server",
+                "windows": "paid-windows-server-2012-r2-windows-server-2016-windows-server-2019-windows-server-2004-20h2",
                 "rhel": "paid-red-hat-enterprise-linux",
                 "rhel_sap": "paid-red-hat-enterprise-linux-for-sap-with-ha-and-update-services",
                 "sles": "paid-sles",
                 "sles_sap": "paid-sles-12-for-sap",
-                "ubuntu_pro": "paid-ubuntu-pro"
+                "ubuntu_pro": "paid-ubuntu-pro",
+                "rhel_7_els": "paid-red-hat-enterprise-linux-7-els"
             }
-            os_value = os_mapping.get(config["os"], "free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license")
-            modified_freq = modified_freq.replace('[\\"free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license\\"]', f'[\\"{os_value}\\"]')
+            final_os_value = os_mapping.get(os)
 
+        # Perform the final replacement with the determined OS/License value
+        modified_freq = modified_freq.replace(
+            '[\\"free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license\\"]',
+            f'[\\"{final_os_value}\\"]'
+        )
         # 8. Provisioning Model
         if "provisioningModel" in config:
             provisioning_value = config["provisioningModel"]
@@ -94,7 +115,7 @@ def generate_single_link(auth_token, f_sid, bl_version, config):
 
         response = requests.post(request_url, params=params, data=payload)
         response.raise_for_status()
-    
+        
     except requests.exceptions.HTTPError as e:
         print(f"HTTPError: The server returned a {e.response.status_code} error.", file=sys.stderr)
         print(f"Response Body: {e.response.text}", file=sys.stderr)

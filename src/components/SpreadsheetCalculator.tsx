@@ -765,20 +765,6 @@ export default function SpreadsheetCalculator() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-orange-600 hover:text-orange-700"
-                            onClick={() => handleGenerateAllLinks(config, true)}
-                            title="Generate all links with debug mode"
-                            disabled={
-                              currentLoading.onDemand ||
-                              currentLoading.oneYear ||
-                              currentLoading.threeYear
-                            }
-                          >
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
                             onClick={() => removeConfiguration(config.id)}
                             title="Delete configuration"

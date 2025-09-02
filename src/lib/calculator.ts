@@ -123,19 +123,27 @@ export const PROVISIONING_MODELS = [
 
 export type ProvisioningModel = typeof PROVISIONING_MODELS[number]
 
+export interface MachineConfig {
+  minMemoryPerVcpu: number;
+  maxMemoryPerVcpu: number;
+  maxVcpus: number;
+  maxMemoryGB: number;
+  supportsExtendedMemory: boolean
+}
+
 // Memory configuration for custom instances
-export const MEMORY_CONFIGS: Record<string, { minMemoryPerVcpu: number; maxMemoryPerVcpu: number; supportsExtendedMemory: boolean }> = {
-  'n2': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 8, supportsExtendedMemory: true },
-  'n2d': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 8, supportsExtendedMemory: true },
-  'n1': { minMemoryPerVcpu: 0.9, maxMemoryPerVcpu: 6.5, supportsExtendedMemory: true },
-  'e2': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 8, supportsExtendedMemory: false },
-  'c3': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 4, supportsExtendedMemory: false },
-  'c3d': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 4, supportsExtendedMemory: false },
-  'c4': { minMemoryPerVcpu: 1, maxMemoryPerVcpu: 2, supportsExtendedMemory: false },
-  'm1': { minMemoryPerVcpu: 14.9, maxMemoryPerVcpu: 14.9, supportsExtendedMemory: false },
-  'm2': { minMemoryPerVcpu: 11.7, maxMemoryPerVcpu: 11.7, supportsExtendedMemory: false },
-  'm3': { minMemoryPerVcpu: 30.5, maxMemoryPerVcpu: 30.5, supportsExtendedMemory: false },
-  't2d': { minMemoryPerVcpu: 1, maxMemoryPerVcpu: 4, supportsExtendedMemory: false }
+export const MEMORY_CONFIGS: Record<string, MachineConfig> = {
+  'n2': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 8, maxVcpus: 128, maxMemoryGB: 864, supportsExtendedMemory: true },
+  'n2d': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 8, maxVcpus: 224, maxMemoryGB: 896, supportsExtendedMemory: true },
+  'n1': { minMemoryPerVcpu: 0.9, maxMemoryPerVcpu: 6.5, maxVcpus: 96, maxMemoryGB: 624,supportsExtendedMemory: true },
+  'e2': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 8, maxVcpus: 128, maxMemoryGB: 512, supportsExtendedMemory: false },
+  'c3': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 4, maxVcpus: 176, maxMemoryGB: 704, supportsExtendedMemory: false },
+  'c3d': { minMemoryPerVcpu: 0.5, maxMemoryPerVcpu: 4, maxVcpus: 360, maxMemoryGB: 1440, supportsExtendedMemory: false },
+  'c4': { minMemoryPerVcpu: 1, maxMemoryPerVcpu: 2, maxVcpus: 192, maxMemoryGB: 768, supportsExtendedMemory: false },
+  'm1': { minMemoryPerVcpu: 14.9, maxMemoryPerVcpu: 14.9, maxVcpus: 128, maxMemoryGB: 1024, supportsExtendedMemory: false },
+  'm2': { minMemoryPerVcpu: 11.7, maxMemoryPerVcpu: 11.7, maxVcpus: 128, maxMemoryGB: 1024, supportsExtendedMemory: false },
+  'm3': { minMemoryPerVcpu: 30.5, maxMemoryPerVcpu: 30.5, maxVcpus: 128, maxMemoryGB: 1024, supportsExtendedMemory: false },
+  't2d': { minMemoryPerVcpu: 1, maxMemoryPerVcpu: 4, maxVcpus: 60, maxMemoryGB: 240, supportsExtendedMemory: false }
 }
 
 const EXTENDED_MEMORY_PRICING: Record<string, Record<string, number>> = {
