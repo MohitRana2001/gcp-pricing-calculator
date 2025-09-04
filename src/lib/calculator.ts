@@ -1,35 +1,31 @@
 export interface VmConfig {
   id: string
-  name: string // Machine type name (e.g., n2d-standard-64)
-  series: string // Machine series (e.g., n2d)
-  family: string // Machine family (e.g., General-purpose)
-  description: string // Description (e.g., "64 vCPUs 256 GB RAM")
-  regionLocation: string // Region (e.g., Mumbai, us-central1)
+  name: string
+  series: string
+  family: string
+  description: string
+  regionLocation: string
   vCpus: number
-  cpuPlatform: string // CPU Platform (e.g., "AMD Milan, AMD Rome")
+  cpuPlatform: string
   memoryGB: number
-  isCustom: boolean // For custom machine configurations
-  os: string // Operating System
-  sqlLicense: string // SQL License
-  provisioningModel: string // 'regular' or 'spot'
+  isCustom: boolean
+  os: string
+  sqlLicense: string
+  provisioningModel: string
 
-  // Pricing structure (per hour rates)
-  onDemandPerHour: number // On-demand per hour
-  cudOneYearPerHour: number // Resource-based CUD - 1 year
-  cudThreeYearPerHour: number // Resource-based CUD - 3 year
-  spotPerHour: number // Per month Spot (converted to hourly)
+  onDemandPerHour: number
+  cudOneYearPerHour: number
+  cudThreeYearPerHour: number
+  spotPerHour: number
 
-  // Additional configuration
-  runningHours: number // Hours per month
-  quantity: number // Number of instances
-  // Calculated costs
+  runningHours: number
+  quantity: number
   estimatedCost: number
   onDemandCost: number
   savings: number
   commitment: string;
   extendedMemoryEnabled?: boolean;
 
-  // Generated shareable links
   links?: {
     onDemand?: string;
     oneYear?: string;
@@ -72,7 +68,6 @@ export interface MachineTypeData {
   monthWindows: number;
 }
 
-// Machine series and families
 export const MACHINE_SERIES = ['c4', 'c3', 'c3d', 'e2', 'n1', 'n2', 'n2d', 'n4', 'm1', 'm2', 'm3', 't2d']
 
 export const MACHINE_FAMILIES: Record<string, string> = {
@@ -101,7 +96,7 @@ export const REGIONS = [
   'asia-southeast1',
   'asia-east1',
   'asia-south1',
-  'mumbai',
+  'asia-south2',
   'africa-south1'
 ]
 
@@ -146,33 +141,6 @@ export const MEMORY_CONFIGS: Record<string, MachineConfig> = {
   't2d': { minMemoryPerVcpu: 1, maxMemoryPerVcpu: 4, maxVcpus: 60, maxMemoryGB: 240, supportsExtendedMemory: false }
 }
 
-const EXTENDED_MEMORY_PRICING: Record<string, Record<string, number>> = {
-  n4: {
-    "us-central1": 0.005379,
-    "us-east1": 0.005379,
-    "us-west1": 0.005379,
-    "mumbai": 0.007531,
-  },
-  n2: {
-    "us-central1": 0.0066,
-    "us-east1": 0.0066,
-    "us-west1": 0.0066,
-    "mumbai": 0.00924,
-  },
-  n2d: {
-    "us-central1": 0.0053,
-    "us-east1": 0.0053,
-    "us-west1": 0.0053,
-    "mumbai": 0.00742,
-  },
-  n1: {
-    "us-central1": 0.0049,
-    "us-east1": 0.0049,
-    "us-west1": 0.0049,
-    "mumbai": 0.00686,
-  },
-};
-
 // Check if a series supports extended/custom memory
 export function seriesSupportsExtendedMemory(series: string): boolean {
   return MEMORY_CONFIGS[series]?.supportsExtendedMemory || false
@@ -199,6 +167,7 @@ export function getAllowedMemoryRange(series: string, vCpus: number): { min: num
 
 // Load machine types data (this would typically load from your JSON file)
 let machineTypesData: MachineTypeData[] = []
+let customPricingData: any = {};
 
 export async function loadMachineTypesData(): Promise<void> {
   try {
@@ -237,6 +206,19 @@ export async function loadMachineTypesData(): Promise<void> {
   } catch (error) {
     console.error('Failed to load machine types data:', error);
   }
+}
+
+export async function loadCustomPricingData(): Promise<void> {
+    try {
+      const response = await fetch('/data/custom-extended.json');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      customPricingData = await response.json();
+      console.log(customPricingData)
+    } catch (error) {
+      console.error('Failed to load custom pricing data:', error);
+    }
 }
 
 export interface PricingDetails {
@@ -280,127 +262,113 @@ function getRhel7ElsCost(vCpus: number, runningHours: number): number {
 }
 
 export function getPricing(config: VmConfig): PricingDetails {
-  const machine = machineTypesData.find(
-    (m) => m.name === config.name && m.regionLocation === config.regionLocation
-  );
+  let onDemand = 0;
+  let cud1y = 0;
+  let cud3y = 0;
+  const HOURS_IN_MONTH = 730;
 
-  if (!machine) {
-    return {
-      onDemand: 0,
-      cud1y: 0,
-      cud3y: 0,
-      osOnDemand: 0,
-      os1yCud: 0,
-      os3yCud: 0,
-      sqlLicenseCost: 0,
-      onDemandInclusive: 0,
-      cud1yInclusive: 0,
-      cud3yInclusive: 0,
-    };
+  const returnZero = { onDemand: 0, cud1y: 0, cud3y: 0, osOnDemand: 0, os1yCud: 0, os3yCud: 0, sqlLicenseCost: 0, onDemandInclusive: 0, cud1yInclusive: 0, cud3yInclusive: 0 };
+
+  if (config.isCustom) {
+      let regionKey = config.regionLocation.toLowerCase();
+      const pricing = customPricingData[config.series]?.[regionKey];
+      if (pricing) {
+          const vcpuPricing = pricing['Custom vCPUs']?.pricing;
+          const memoryPricing = pricing['Custom Memory']?.pricing;
+
+          if (vcpuPricing && memoryPricing) {
+              const onDemandVcpuRate = vcpuPricing['Default (USD)'] || 0;
+              const onDemandMemoryRate = memoryPricing['Default (USD)'] || 0;
+              onDemand = (onDemandVcpuRate * config.vCpus + onDemandMemoryRate * config.memoryGB) * config.runningHours;
+
+              const cud1yVcpuRate = vcpuPricing['Flexible CUD - 1 Year (USD)'] || 0;
+              const cud1yMemoryRate = memoryPricing['Flexible CUD - 1 Year (USD)'] || 0;
+              cud1y = (cud1yVcpuRate * config.vCpus + cud1yMemoryRate * config.memoryGB) * HOURS_IN_MONTH;
+              
+              const cud3yVcpuRate = vcpuPricing['Flexible CUD - 3 Year (USD)'] || 0;
+              const cud3yMemoryRate = memoryPricing['Flexible CUD - 3 Year (USD)'] || 0;
+              cud3y = (cud3yVcpuRate * config.vCpus + cud3yMemoryRate * config.memoryGB) * HOURS_IN_MONTH;
+          }
+      } else {
+        return returnZero;
+      }
+  } else {
+      const machine = machineTypesData.find(m => m.name === config.name && m.regionLocation === config.regionLocation);
+      if (!machine) return returnZero;
+      
+      onDemand = (Number(machine.onDemandPerHour) || 0) * config.runningHours;
+      cud1y = Number(machine.month1yCud) || 0;
+      cud3y = Number(machine.month3yCud) || 0;
   }
-
-  let onDemand = (Number(machine.onDemandPerHour) || 0) * config.runningHours;
-  let cud1y = Number(machine.month1yCud) || 0;
-  let cud3y = Number(machine.month3yCud) || 0;
-
+  
   if (config.provisioningModel === 'spot') {
-    onDemand = (Number(machine.spotPerHour) || 0) * config.runningHours;
-    cud1y = 0; // No CUDs for Spot VM compute
-    cud3y = 0; // No CUDs for Spot VM compute
+    if(!config.isCustom) {
+      const machine = machineTypesData.find(m => m.name === config.name && m.regionLocation === config.regionLocation);
+      onDemand = (Number(machine?.spotPerHour) || 0) * config.runningHours;
+    }
+    cud1y = 0; 
+    cud3y = 0;
   }
 
-  let osOnDemand = 0;
-  let os1yCud = 0;
-  let os3yCud = 0;
+  let osOnDemand = 0, os1yCud = 0, os3yCud = 0;
+  const machineForOs = config.isCustom 
+    ? machineTypesData.find(m => m.series === config.series && m.regionLocation === config.regionLocation)
+    : machineTypesData.find(m => m.name === config.name && m.regionLocation === config.regionLocation);
 
-  switch (config.os) {
-    case 'windows':
-      osOnDemand = Number(machine.monthWindows) || 0;
-      os1yCud = Number(machine.monthWindows) || 0;
-      os3yCud = Number(machine.monthWindows) || 0;
-      break;
-    case 'rhel':
-      osOnDemand = Number(machine.monthRhel) || 0;
-      os1yCud = Number(machine.monthRhel1yCud) || 0;
-      os3yCud = Number(machine.monthRhel3yCud) || 0;
-      break;
-    case 'rhel_sap':
-        osOnDemand = Number(machine?.monthRhelSap) || 0;
-        os1yCud = Number(machine?.monthRhelSap1yCud) || 0;
-        os3yCud = Number(machine?.monthRhelSap3yCud) || 0;
-        break;
-    case 'sles':
-      osOnDemand = Number(machine.monthSles) || 0;
-      os1yCud = Number(machine.monthSlesSap1yCud) || 0;
-      os3yCud = Number(machine.monthSlesSap3yCud) || 0;
-      break;
-    case 'sles_sap':
-        osOnDemand = Number(machine.monthSlesSap) || 0;
-        os1yCud = Number(machine.monthSlesSap1yCud) || 0;
-        os3yCud = Number(machine.monthSlesSap3yCud) || 0;
-        break;
-    case 'ubuntu_pro':
-        const ubuntuCost = getUbuntuProCost(config.vCpus, config.memoryGB, config.runningHours);
-        osOnDemand = ubuntuCost;
-        os1yCud = ubuntuCost; // Assuming same price for CUD
-        os3yCud = ubuntuCost; // Assuming same price for CUD
-        break;
-    case 'rhel_7_els':
-        const rhel7ElsCost = getRhel7ElsCost(config.vCpus, config.runningHours);
-        osOnDemand = rhel7ElsCost;
-        os1yCud = rhel7ElsCost; // Assuming same price for CUD
-        os3yCud = rhel7ElsCost; // Assuming same price for CUD
-        break;
+  if (machineForOs) {
+      switch (config.os) {
+          case 'windows': osOnDemand = os1yCud = os3yCud = Number(machineForOs.monthWindows) || 0; break;
+          case 'rhel': osOnDemand = Number(machineForOs.monthRhel) || 0; os1yCud = Number(machineForOs.monthRhel1yCud) || 0; os3yCud = Number(machineForOs.monthRhel3yCud) || 0; break;
+          case 'rhel_sap': osOnDemand = Number(machineForOs.monthRhelSap) || 0; os1yCud = Number(machineForOs.monthRhelSap1yCud) || 0; os3yCud = Number(machineForOs.monthRhelSap3yCud) || 0; break;
+          case 'sles': osOnDemand = Number(machineForOs.monthSles) || 0; os1yCud = Number(machineForOs.monthSlesSap1yCud) || 0; os3yCud = Number(machineForOs.monthSlesSap3yCud) || 0; break;
+          case 'sles_sap': osOnDemand = Number(machineForOs.monthSlesSap) || 0; os1yCud = Number(machineForOs.monthSlesSap1yCud) || 0; os3yCud = Number(machineForOs.monthSlesSap3yCud) || 0; break;
+          case 'ubuntu_pro': osOnDemand = os1yCud = os3yCud = getUbuntuProCost(config.vCpus, config.memoryGB, config.runningHours); break;
+          case 'rhel_7_els': osOnDemand = os1yCud = os3yCud = getRhel7ElsCost(config.vCpus, config.runningHours); break;
+      }
   }
 
   let sqlLicenseCost = 0;
   if (config.os === 'windows') {
-    const sqlCores = Math.max(4, config.vCpus);
-    switch (config.sqlLicense) {
-        case 'enterprise':
-            sqlLicenseCost = 0.399 * sqlCores * config.runningHours;
-            break;
-        case 'standard':
-            sqlLicenseCost = 0.1200 * sqlCores * config.runningHours;
-            break;
-        case 'web':
-            sqlLicenseCost = 0.011 * sqlCores * config.runningHours;
-            break;
-    }
-  }
-
-  let extendedMemoryCost = 0;
-
-  if (config.extendedMemoryEnabled && seriesSupportsExtendedMemory(config.series)) {
-    const seriesConfig = MEMORY_CONFIGS[config.series];
-    const seriesPricing = EXTENDED_MEMORY_PRICING[config.series];
-
-    if (seriesConfig && seriesPricing && seriesPricing[config.regionLocation]) {
-      const standardMemoryLimit = config.vCpus * seriesConfig.maxMemoryPerVcpu;
-
-      if (config.memoryGB > standardMemoryLimit) {
-        const extraMemoryGB = config.memoryGB - standardMemoryLimit;
-        const costPerGbHour = seriesPricing[config.regionLocation];
-        extendedMemoryCost = extraMemoryGB * costPerGbHour * config.runningHours;
+      const sqlCores = Math.max(4, config.vCpus);
+      switch (config.sqlLicense) {
+          case 'enterprise': sqlLicenseCost = 0.399 * sqlCores * config.runningHours; break;
+          case 'standard': sqlLicenseCost = 0.1200 * sqlCores * config.runningHours; break;
+          case 'web': sqlLicenseCost = 0.011 * sqlCores * config.runningHours; break;
       }
-    }
   }
 
-  const onDemandInclusive = onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCost;
-  const cud1yInclusive = cud1y + os1yCud + sqlLicenseCost + extendedMemoryCost;
-  const cud3yInclusive = cud3y + os3yCud + sqlLicenseCost + extendedMemoryCost;
+  let extendedMemoryCostOnDemand = 0, extendedMemoryCost1y = 0, extendedMemoryCost3y = 0;
+  if (config.extendedMemoryEnabled && seriesSupportsExtendedMemory(config.series)) {
+      const seriesConfig = MEMORY_CONFIGS[config.series];
+      const standardMemoryLimit = config.vCpus * seriesConfig.maxMemoryPerVcpu;
+      if (config.memoryGB > standardMemoryLimit) {
+          const extraMemoryGB = config.memoryGB - standardMemoryLimit;
+          let regionKey = config.regionLocation.toLowerCase();
+          if (regionKey === 'asia-south1') {
+              regionKey = 'mumbai';
+          } else if (regionKey === 'asia-south2') {
+              regionKey = 'delhi';
+          }
+          const pricing = customPricingData[config.series]?.[regionKey]?.['Extended custom memory']?.pricing;
+          if (pricing) {
+              extendedMemoryCostOnDemand = (pricing['Default (USD)'] || 0) * extraMemoryGB * config.runningHours;
+              extendedMemoryCost1y = (pricing['Flexible CUD - 1 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
+              extendedMemoryCost3y = (pricing['Flexible CUD - 3 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
+              if (config.provisioningModel === 'spot') {
+                  extendedMemoryCost1y = 0;
+                  extendedMemoryCost3y = 0;
+              }
+          }
+      }
+  }
 
   return {
-    onDemand,
-    cud1y,
-    cud3y,
-    osOnDemand,
-    os1yCud,
-    os3yCud,
-    sqlLicenseCost,
-    onDemandInclusive,
-    cud1yInclusive,
-    cud3yInclusive,
+      onDemand, cud1y, cud3y,
+      osOnDemand, os1yCud, os3yCud,
+      sqlLicenseCost,
+      onDemandInclusive: onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCostOnDemand,
+      cud1yInclusive: cud1y + os1yCud + sqlLicenseCost + extendedMemoryCost1y,
+      cud3yInclusive: cud3y + os3yCud + sqlLicenseCost + extendedMemoryCost3y,
   };
 }
 
@@ -449,9 +417,7 @@ export function findMatchingMachineType(series: string, region: string, vCpus: n
   ) || null
 }
 
-
-
-// Initialize data loading
 if (typeof window !== 'undefined') {
-  loadMachineTypesData()
+  loadMachineTypesData();
+  loadCustomPricingData();
 }
