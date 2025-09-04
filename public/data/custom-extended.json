@@ -1,0 +1,230 @@
+{
+  "e2": {
+    "asia-south1": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.02750926,
+          "Flexible CUD - 1 Year (USD)": 0.019806667,
+          "Flexible CUD - 3 Year (USD)": 0.014855,
+          "Resource CUDs Premium (USD)": 0.000510391
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.003686256,
+          "Flexible CUD - 1 Year (USD)": 0.002654104,
+          "Flexible CUD - 3 Year (USD)": 0.001990578,
+          "Resource CUDs Premium (USD)": 0.000068411
+        },
+        "unit": "per 1 gibibyte"
+      }
+    },
+    "asia-south2": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.02750926,
+          "Flexible CUD - 1 Year (USD)": 0.019806667,
+          "Flexible CUD - 3 Year (USD)": 0.014855,
+          "Resource CUDs Premium (USD)": 0.000510407
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.003686256,
+          "Flexible CUD - 1 Year (USD)": 0.002654104,
+          "Flexible CUD - 3 Year (USD)": 0.001990578,
+          "Resource CUDs Premium (USD)": 0.000068405
+        },
+        "unit": "per 1 gibibyte"
+      }
+    }
+  },
+  "n1": {
+    "asia-south1": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.0398685,
+          "Flexible CUD - 1 Year (USD)": 0.02870532,
+          "Flexible CUD - 3 Year (USD)": 0.02152899,
+          "Resource CUDs Premium (USD)": 0.0007397
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.0053424,
+          "Flexible CUD - 1 Year (USD)": 0.003846528,
+          "Flexible CUD - 3 Year (USD)": 0.002884896,
+          "Resource CUDs Premium (USD)": 0.000099164
+        },
+        "unit": "per 1 gibibyte hour"
+      },
+      "Extended custom memory": {
+        "pricing": {
+          "Default (USD)": 0.010929,
+          "Flexible CUD - 1 Year (USD)": 0.00786888,
+          "Flexible CUD - 3 Year (USD)": 0.00590166,
+          "Resource CUD - 1 Year (USD)": null,
+          "Resource CUD - 3 Year (USD)": null
+        },
+        "unit": "per 1 gibibyte hour"
+      }
+    },
+    "asia-south2": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.0398685,
+          "Flexible CUD - 1 Year (USD)": 0.02870532,
+          "Flexible CUD - 3 Year (USD)": 0.02152899,
+          "Resource CUDs Premium (USD)": 0.000739723
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.0053424,
+          "Flexible CUD - 1 Year (USD)": 0.003846528,
+          "Flexible CUD - 3 Year (USD)": 0.002884896,
+          "Resource CUDs Premium (USD)": 0.000114525
+        },
+        "unit": "per 1 gibibyte hour"
+      },
+      "Extended custom memory": {
+        "pricing": {
+          "Default (USD)": 0.01093,
+          "Flexible CUD - 1 Year (USD)": 0.0078696,
+          "Flexible CUD - 3 Year (USD)": 0.0059022,
+          "Resource CUD - 1 Year (USD)": null,
+          "Resource CUD - 3 Year (USD)": null
+        },
+        "unit": "per 1 gibibyte hour"
+      }
+    }
+  },
+  "n2": {
+    "asia-south1": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.0398685,
+          "Flexible CUD - 1 Year (USD)": 0.02870532,
+          "Flexible CUD - 3 Year (USD)": 0.02152899,
+          "Resource CUDs Premium (USD)": 0.0007397
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.0053424,
+          "Flexible CUD - 1 Year (USD)": 0.003846528,
+          "Flexible CUD - 3 Year (USD)": 0.002884896,
+          "Resource CUDs Premium (USD)": 0.000099164
+        },
+        "unit": "per 1 gibibyte hour"
+      },
+      "Extended custom memory": {
+        "pricing": {
+          "Default (USD)": 0.010929,
+          "Flexible CUD - 1 Year (USD)": 0.00786888,
+          "Flexible CUD - 3 Year (USD)": 0.00590166,
+          "Resource CUD - 1 Year (USD)": 0.003205,
+          "Resource CUD - 3 Year (USD)": 0.00229
+        },
+        "unit": "per 1 gibibyte hour"
+      }
+    },
+    "asia-south2": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.0398685,
+          "Flexible CUD - 1 Year (USD)": 0.02870532,
+          "Flexible CUD - 3 Year (USD)": 0.02152899,
+          "Resource CUDs Premium (USD)": 0.000739723
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.0053424,
+          "Flexible CUD - 1 Year (USD)": 0.003846528,
+          "Flexible CUD - 3 Year (USD)": 0.002884896,
+          "Resource CUDs Premium (USD)": 0.000114525
+        },
+        "unit": "per 1 gibibyte hour"
+      },
+      "Extended custom memory": {
+        "pricing": {
+          "Default (USD)": 0.01093,
+          "Flexible CUD - 1 Year (USD)": 0.0078696,
+          "Flexible CUD - 3 Year (USD)": 0.0059022,
+          "Resource CUD - 1 Year (USD)": 0.003205,
+          "Resource CUD - 3 Year (USD)": 0.00229
+        },
+        "unit": "per 1 gibibyte hour"
+      }
+    }
+  },
+  "n2d": {
+    "asia-south1": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.01905855,
+          "Flexible CUD - 1 Year (USD)": 0.013722156,
+          "Flexible CUD - 3 Year (USD)": 0.010291617,
+          "Resource CUDs Premium (USD)": 0.000643552
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.00255465,
+          "Flexible CUD - 1 Year (USD)": 0.001839348,
+          "Flexible CUD - 3 Year (USD)": 0.001379511,
+          "Resource CUDs Premium (USD)": 0.000086268
+        },
+        "unit": "per 1 gibibyte hour"
+      },
+      "Extended custom memory": {
+        "pricing": {
+          "Default (USD)": 0.005484,
+          "Flexible CUD - 1 Year (USD)": 0.00394848,
+          "Flexible CUD - 3 Year (USD)": 0.00296136,
+          "Resource CUD - 1 Year (USD)": 0.001533,
+          "Resource CUD - 3 Year (USD)": 0.001095
+        },
+        "unit": "per 1 gibibyte hour"
+      }
+    },
+    "asia-south2": {
+      "Custom vCPUs": {
+        "pricing": {
+          "Default (USD)": 0.0346857,
+          "Flexible CUD - 1 Year (USD)": 0.024973704,
+          "Flexible CUD - 3 Year (USD)": 0.018730278,
+          "Resource CUDs Premium (USD)": 0.000643572
+        },
+        "unit": "per 1 hour"
+      },
+      "Custom Memory": {
+        "pricing": {
+          "Default (USD)": 0.00464835,
+          "Flexible CUD - 1 Year (USD)": 0.003346812,
+          "Flexible CUD - 3 Year (USD)": 0.002510109,
+          "Resource CUDs Premium (USD)": 0.00008633
+        },
+        "unit": "per 1 gibibyte hour"
+      },
+      "Extended custom memory": {
+        "pricing": {
+          "Default (USD)": 0.0099708,
+          "Flexible CUD - 1 Year (USD)": 0.007178976,
+          "Flexible CUD - 3 Year (USD)": 0.005384232,
+          "Resource CUD - 1 Year (USD)": 0.002788,
+          "Resource CUD - 3 Year (USD)": 0.001992
+        },
+        "unit": "per 1 gibibyte hour"
+      }
+    }
+  }
+}
