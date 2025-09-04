@@ -80,7 +80,7 @@ export default function SpreadsheetCalculator() {
       series: "e2",
       family: "General-purpose",
       description: "2 vCPUs 8 GB RAM",
-      regionLocation: "us-central1",
+      regionLocation: "asia-south1",
       vCpus: 2,
       cpuPlatform: "Intel Cascade Lake",
       memoryGB: 8,
@@ -144,7 +144,7 @@ export default function SpreadsheetCalculator() {
           commitment: commitment,
           options: {
             debug: enableDebug,
-            timeout: 60000, // Increased timeout for VM environments
+            timeout: 60000,
           },
         }),
       });
@@ -620,7 +620,7 @@ export default function SpreadsheetCalculator() {
                   />
                 </th>
                 <th className="w-24 p-3 text-left font-semibold">Actions</th>
-                <th className="min-w-[140px] p-3 text-left font-semibold">
+                <th className="min-w-[200px] p-3 text-left font-semibold">
                   Region Location
                 </th>
                 <th className="min-w-[100px] p-3 text-left font-semibold">
