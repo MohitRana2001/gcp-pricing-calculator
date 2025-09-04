@@ -15,6 +15,7 @@ import {
   REGIONS,
   MACHINE_SERIES,
   VmConfig,
+  seriesSupportsCustom,
   seriesSupportsExtendedMemory,
   getAllowedMemoryRange,
   getAvailableMachineTypes,
@@ -128,9 +129,7 @@ export default function SpreadsheetCalculator() {
 
     setLinkLoadingState(config.id, linkType, true);
     try {
-      console.log(`🔗 Generating ${commitment} link for ${config.name}...`);
-      
-      // Create an enhanced config with the commitment information
+
       const configWithCommitment = {
         ...config,
         commitment: commitment
@@ -161,7 +160,7 @@ export default function SpreadsheetCalculator() {
           [linkType]: result.shareUrl,
         };
         updateConfiguration(config.id, { links: linkUpdate });
-        console.log(`✅ Successfully generated ${commitment} link for ${config.name}`);
+        console.log(`Successfully generated ${commitment} link for ${config.name}`);
       } else {
         throw new Error(result.error || "API did not return a shareable URL.");
       }
@@ -198,7 +197,7 @@ export default function SpreadsheetCalculator() {
       // Generate all links in parallel
       const promises = commitmentTypes.map(async (commitment) => {
         try {
-          console.log(`🔗 Generating ${commitment} link for ${config.name}...`);
+          console.log(`Generating ${commitment} link for ${config.name}...`);
           
           // Create an enhanced config with the commitment information
           const configWithCommitment = {
@@ -524,12 +523,12 @@ export default function SpreadsheetCalculator() {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-      minimumFractionDigits: 4,
+      minimumFractionDigits: 2,
     }).format(amount);
   };
 
-  const getMemoryValidationInfo = (config: any) => {
-    if (!config.isCustom || !seriesSupportsExtendedMemory(config.series)) {
+  const getMemoryValidationInfo = (config: VmConfig) => {
+    if (!config.isCustom) {
       return null;
     }
 
@@ -714,6 +713,7 @@ export default function SpreadsheetCalculator() {
                     oneYear: false,
                     threeYear: false,
                   };
+                  const supportsCustom = seriesSupportsCustom(config.series);
 
                   return (
                     <motion.tr
@@ -808,6 +808,8 @@ export default function SpreadsheetCalculator() {
                               value,
                               config.regionLocation
                             );
+                            const newSeriesSupportsCustom = seriesSupportsCustom(value);
+                            
                             if (availableTypes.length > 0) {
                               const firstType = availableTypes[0];
                               updateConfiguration(config.id, {
@@ -822,10 +824,14 @@ export default function SpreadsheetCalculator() {
                                 cudThreeYearPerHour:
                                   firstType.cudThreeYearPerHour,
                                 spotPerHour: firstType.spotPerHour,
+                                // If the new series doesn't support custom, force isCustom to false
+                                isCustom: newSeriesSupportsCustom ? config.isCustom : false,
                               });
                             } else {
                               updateConfiguration(config.id, {
                                 series: value,
+                                // Also handle this edge case
+                                isCustom: newSeriesSupportsCustom ? config.isCustom : false,
                               });
                             }
                           }}
@@ -847,6 +853,7 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3 text-center">
                         <Checkbox
                           checked={config.isCustom}
+                          disabled={!supportsCustom}
                           onCheckedChange={(checked) => {
                             const isChecked = checked === true;
                             if (isChecked) {
@@ -941,7 +948,7 @@ export default function SpreadsheetCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="custom">Custom</SelectItem>
+                            <SelectItem value="custom" disabled={!supportsCustom}>Custom</SelectItem>
                             {availableTypes.map((type) => (
                               <SelectItem key={type.name} value={type.name}>
                                 {type.name}
@@ -972,12 +979,14 @@ export default function SpreadsheetCalculator() {
                             className="h-8 text-sm"
                             min="1"
                             max="96"
+                            disabled={!supportsCustom}
                             autoFocus
                           />
                         ) : (
                           <button
                             onClick={() => handleCellClick(config.id, "vCpus")}
-                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                            disabled={!supportsCustom}
+                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {config.vCpus}
                           </button>
@@ -1011,6 +1020,7 @@ export default function SpreadsheetCalculator() {
                               min={memoryInfo?.min || 1}
                               max={memoryInfo?.max || 384}
                               step="0.25"
+                              disabled={!supportsCustom}
                               autoFocus
                             />
                             {memoryInfo && (
@@ -1024,7 +1034,8 @@ export default function SpreadsheetCalculator() {
                             onClick={() =>
                               handleCellClick(config.id, "memoryGB")
                             }
-                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                            disabled={!supportsCustom}
+                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <div className="flex items-center gap-1">
                               {config.memoryGB}
