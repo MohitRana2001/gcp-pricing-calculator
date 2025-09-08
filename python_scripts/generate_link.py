@@ -6,9 +6,6 @@ import sys
 import os
 import compute_engine_calculator_pb2 as calculator_pb2
 
-# --- DEFINE YOUR CREDENTIALS HERE ---
-# In a real application, you should load these from environment variables
-# For example: os.getenv("GCP_AT_TOKEN")
 AT_TOKEN = os.getenv("AT_TOKEN")
 F_SID = os.getenv("F_SID")
 BL_VERSION = os.getenv("BL_VERSION")
@@ -16,18 +13,13 @@ BL_VERSION = os.getenv("BL_VERSION")
 
 def generate_single_link(auth_token, f_sid, bl_version, config):
     try:
-        # --- STEP 1: INTELLIGENTLY MODIFY THE "GOLDEN REQUEST" TEMPLATE ---
         print("--> Modifying template with full config...", file=sys.stderr)
         
-        # This is a template from a default e2-standard-2 instance.
-        # We will replace all its key values with the data from your config.
         f_req_template = '[[["jUj4td","[null,null,null,null,null,[[8,\\"FORM_ID_UUID\\",null,1,9,null,\\"Compute Engine\\",\\"Instances\\",\\"Compute Engine\\",[142,130,114,110,112],[[9,[[102,[null,null,null,null,null,null,null,null,[null,null,[128,[null,null,null,null,null,null,null,null,null,1],\\"Number of Instances\\"],[129,[null,null,null,null,4,null,null,7,null,730],\\"Instance-time\\"]]]],[106,[\\"free-debian-centos-coreos-ubuntu-or-byol-bring-your-own-license\\"]],[107,[\\"regular\\"]],[108,[null,null,null,null,null,null,[null,null,null,[130,[\\"e2-standard-2\\"],\\"Machine type\\"],[131,[\\"2\\"],\\"Number of vCPUs\\"],[132,[\\"8\\"],\\"Amount of memory\\"],[141,[\\"general-purpose\\"],\\"Machine Family\\"],[142,[\\"e2\\"],\\"Series\\"]]]],[115,[\\"us-central1\\"],\\"Region\\"],[116,[\\"none\\"],\\"Committed use discount options\\",\\"None\\"]]],[10,[]],[21,[]]],null,\\"Instances\\"]],\\"USD\\",null,\\"ESTIMATE_ID_UUID\\"]",null,"generic"]]]'
 
-        # Generate unique IDs for this specific request
         form_id_uuid = str(uuid.uuid4()).upper()
         estimate_id_uuid = str(uuid.uuid4()).upper()
 
-        # Perform a series of replacements to inject the new config
         modified_freq = f_req_template.replace("FORM_ID_UUID", form_id_uuid)
         modified_freq = modified_freq.replace("ESTIMATE_ID_UUID", estimate_id_uuid)
         
@@ -98,6 +90,11 @@ def generate_single_link(auth_token, f_sid, bl_version, config):
                 ',[null,null,null,null,4,null,null,7,null,730],\\"Instance-time\\"',
                 f',[null,null,null,null,4,null,null,7,null,{config["runningHours"]}],\\"Instance-time\\"'
             )
+            
+        if config.get("extendedMemoryEnabled", False):
+            anchor_string = f'[\\"{config["series"]}\\"],\\"Series\\"]]]'
+            replacement_string = f'[\\"{config["series"]}\\"],\\"Series\\"],[145,[null,null,null,null,null,1],\\"Extended memory\\"]]]'
+            modified_freq = modified_freq.replace(anchor_string, replacement_string)
             
         if "commitment" in config:
             commitment_value = config["commitment"]

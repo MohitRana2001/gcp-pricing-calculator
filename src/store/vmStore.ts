@@ -131,8 +131,9 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     cpuPlatform: 'Intel Cascade Lake',
     memoryGB: 8,
     isCustom: false,
-    os: 'linux', // Default OS
-    sqlLicense: 'none', // Default SQL license
+    extendedMemoryEnabled: false,
+    os: 'linux',
+    sqlLicense: 'none',
     provisioningModel: 'regular',
     onDemandPerHour: 0.067123,
     cudOneYearPerHour: 0.043630,
@@ -141,7 +142,7 @@ function createDefaultConfiguration(overrides: Partial<VmConfig> = {}): Omit<VmC
     runningHours: 730,
     quantity: 1,
     discountModel: 'On-Demand',
-    commitment: 'none', // Default commitment
+    commitment: 'none',
     links: {},
     ...overrides
   }
@@ -404,37 +405,99 @@ export const useVmStore = create<VmStore>((set, get) => ({
   },
 
   exportToCSV: () => {
-    const configs = get().configurations
+    const configs = get().configurations;
     if (configs.length === 0) {
-      alert('No configurations to export')
-      return
+      alert("No configurations to export");
+      return;
     }
 
     const headers = [
-      'Name', 'Series', 'Family', 'Description', 'Region Location', 'vCPUs',
-      'CPU Platform', 'Memory (GB)', 'Is Custom', 'Running Hours', 'Quantity',
-      'Provisioning Model', 'On-Demand Per Hour ($)', 'CUD 1-Year Per Hour ($)',
-      'CUD 3-Year Per Hour ($)', 'Spot Per Hour ($)', 'Estimated Cost ($)',
-      'On-Demand Cost ($)', 'Savings ($)', 'On-Demand Link', '1-Year CUD Link', '3-Year CUD Link'
+      "Name",
+      "Series",
+      "Family",
+      "Description",
+      "Region Location",
+      "vCPUs",
+      "CPU Platform",
+      "Memory (GB)",
+      "Is Custom",
+      "Running Hours",
+      "Quantity",
+      "Provisioning Model",
+      "On-Demand Per Hour ($)",
+      "CUD 1-Year Per Hour ($)",
+      "CUD 3-Year Per Hour ($)",
+      "Spot Per Hour ($)",
+      "Estimated Cost ($)",
+      "On-Demand Cost ($)",
+      "Savings ($)",
+      "On-Demand Link",
+      "1-Year CUD Link",
+      "3-Year CUD Link",
     ];
 
-    const csvContent = [
-      headers.join(','),
-      ...configs.map(config => [
-        config.name, config.series, config.family, config.description,
-        config.regionLocation, config.vCpus, config.cpuPlatform, config.memoryGB,
-        config.isCustom, config.runningHours, config.quantity,
-        config.provisioningModel || (config.provisioningModel === 'spot' ? 'spot' : 'regular'),
-        config.onDemandPerHour, config.cudOneYearPerHour, config.cudThreeYearPerHour,
-        config.spotPerHour, config.estimatedCost, config.onDemandCost, config.savings,
-        config.links?.onDemand || '',
-        config.links?.oneYear || '',
-        config.links?.threeYear || ''
-      ].join(','))
-    ].join('\n')
+    const toCsvField = (value: any): string => {
+      const str = String(value ?? '');
+      if (/[",\n]/.test(str)) {
+        const escapedStr = str.replace(/"/g, '""');
+        return `"${escapedStr}"`;
+      }
+      return str;
+    };
 
-    const timestamp = new Date().toISOString().split('T')[0]
-    downloadCSV(csvContent, `gcp-compute-engine-${timestamp}.csv`)
+    const csvContent = [
+      headers.map(toCsvField).join(","),
+      ...configs.map((config) => {
+        let onDemandPerHour = config.onDemandPerHour;
+        let cudOneYearPerHour = config.cudOneYearPerHour;
+        let cudThreeYearPerHour = config.cudThreeYearPerHour;
+        let spotPerHour = config.spotPerHour;
+
+        if (config.isCustom) {
+          const pricing = getPricing(config);
+          const monthlyHours = 730;
+
+          if (config.runningHours > 0) {
+            onDemandPerHour = pricing.onDemand / config.runningHours;
+          } else {
+            onDemandPerHour = 0;
+          }
+
+          cudOneYearPerHour = pricing.cud1y / monthlyHours;
+          cudThreeYearPerHour = pricing.cud3y / monthlyHours;
+          spotPerHour = 0; // Custom spot pricing is not available
+        }
+
+        const row = [
+          config.name,
+          config.series,
+          config.family,
+          config.description,
+          config.regionLocation,
+          config.vCpus,
+          config.cpuPlatform,
+          config.memoryGB,
+          config.isCustom,
+          config.runningHours,
+          config.quantity,
+          config.provisioningModel || "regular",
+          onDemandPerHour,
+          cudOneYearPerHour,
+          cudThreeYearPerHour,
+          spotPerHour,
+          config.estimatedCost,
+          config.onDemandCost,
+          config.savings,
+          config.links?.onDemand,
+          config.links?.oneYear,
+          config.links?.threeYear,
+        ];
+        return row.map(toCsvField).join(",");
+      }),
+    ].join("\n");
+
+    const timestamp = new Date().toISOString().split("T")[0];
+    downloadCSV(csvContent, `gcp-compute-engine-${timestamp}.csv`);
   },
 
   intelligentCSVMapping: async (csvData: string) => {
@@ -475,7 +538,7 @@ export const useVmStore = create<VmStore>((set, get) => ({
 
       mappedConfigurations.forEach(config => get().addConfiguration(config))
 
-      alert(`Successfully imported ${mappedConfigurations.length} configurations with intelligent field mapping!`)
+      alert(`Successfully imported ${mappedConfigurations.length} configurations with intelligent field mapping!`);
 
     } catch (error) {
       console.error('Error importing CSV:', error)
@@ -525,3 +588,8 @@ export const useVmStore = create<VmStore>((set, get) => ({
     return get().getComputeEngineCost() + get().getCloudStorageCost() + get().getCloudSQLCost()
   },
 }))
+
+// Initialize the store
+if (typeof window !== 'undefined') {
+  useVmStore.getState().initializeData()
+}

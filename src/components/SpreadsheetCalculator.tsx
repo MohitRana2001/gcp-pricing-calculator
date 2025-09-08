@@ -14,6 +14,7 @@ import { useVmStore, LinkLoadingState } from "@/store/vmStore";
 import {
   REGIONS,
   MACHINE_SERIES,
+  MEMORY_CONFIGS,
   VmConfig,
   seriesSupportsCustom,
   seriesSupportsExtendedMemory,
@@ -329,11 +330,26 @@ export default function SpreadsheetCalculator() {
       });
     } else {
       // No matching type found, set to custom
-      updateConfiguration(configId, {
+      const updates: Partial<VmConfig> = {
         [field]: value,
         isCustom: true,
         name: "custom",
-      });
+      };
+
+      // Automatically manage extendedMemoryEnabled flag
+      if (seriesSupportsExtendedMemory(config.series)) {
+        const seriesConfig = MEMORY_CONFIGS[config.series];
+        const standardMemoryLimit = newVcpus * seriesConfig.maxMemoryPerVcpu;
+        if (newMemoryGB > standardMemoryLimit) {
+          updates.extendedMemoryEnabled = true;
+        } else {
+          updates.extendedMemoryEnabled = false;
+        }
+      } else {
+        updates.extendedMemoryEnabled = false;
+      }
+
+      updateConfiguration(configId, updates);
     }
   };
 

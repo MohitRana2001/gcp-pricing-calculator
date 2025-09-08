@@ -329,8 +329,8 @@ export function getPricing(config: VmConfig): PricingDetails {
         }
 
         onDemand = (vcpuPricing['Default (USD)'] * config.vCpus + memoryPricing['Default (USD)'] * standardMemoryGB) * config.runningHours;
-        cud1y = (vcpuPricing['Flexible CUD - 1 Year (USD)'] * config.vCpus + memoryPricing['Flexible CUD - 1 Year (USD)'] * standardMemoryGB) * HOURS_IN_MONTH;
-        cud3y = (vcpuPricing['Flexible CUD - 3 Year (USD)'] * config.vCpus + memoryPricing['Flexible CUD - 3 Year (USD)'] * standardMemoryGB) * HOURS_IN_MONTH;
+        cud1y = (vcpuPricing['Resource CUDs - 1 Year (USD)'] * config.vCpus + memoryPricing['Resource CUDs - 1 Year (USD)'] * standardMemoryGB) * HOURS_IN_MONTH;
+        cud3y = (vcpuPricing['Resource CUDs - 3 Year (USD)'] * config.vCpus + memoryPricing['Resource CUDs - 3 Year (USD)'] * standardMemoryGB) * HOURS_IN_MONTH;
       }
     } else {
       return returnZero;
@@ -381,7 +381,7 @@ export function getPricing(config: VmConfig): PricingDetails {
   }
 
   let extendedMemoryCostOnDemand = 0, extendedMemoryCost1y = 0, extendedMemoryCost3y = 0;
-  if (seriesSupportsExtendedMemory(config.series)) {
+  if (config.extendedMemoryEnabled && seriesSupportsExtendedMemory(config.series)) {
     const seriesConfig = MEMORY_CONFIGS[config.series];
     const standardMemoryLimit = config.vCpus * seriesConfig.maxMemoryPerVcpu;
 
@@ -392,8 +392,9 @@ export function getPricing(config: VmConfig): PricingDetails {
 
       if (pricing) {
         extendedMemoryCostOnDemand = (pricing['Default (USD)'] || 0) * extraMemoryGB * config.runningHours;
-        extendedMemoryCost1y = (pricing['Flexible CUD - 1 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
-        extendedMemoryCost3y = (pricing['Flexible CUD - 3 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
+        console.log(pricing['Resource CUDs - 1 Year (USD)'], pricing['Resource CUDs - 3 Year (USD)'])
+        extendedMemoryCost1y = (pricing['Resource CUDs - 1 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
+        extendedMemoryCost3y = (pricing['Resource CUDs - 3 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
 
         if (config.provisioningModel === 'spot') {
           extendedMemoryCost1y = 0;
