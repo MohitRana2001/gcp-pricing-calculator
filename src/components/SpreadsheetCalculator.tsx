@@ -168,7 +168,7 @@ export default function SpreadsheetCalculator() {
     } catch (error) {
       console.error(`Failed to generate ${commitment} link:`, error);
       alert(
-        `Error generating link: ${
+        `Error generating link: ${ 
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
@@ -285,7 +285,7 @@ export default function SpreadsheetCalculator() {
     } catch (error) {
       console.error("Error in parallel link generation:", error);
       alert(
-        `Error generating links: ${
+        `Error generating links: ${ 
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
@@ -334,6 +334,7 @@ export default function SpreadsheetCalculator() {
         [field]: value,
         isCustom: true,
         name: "custom",
+        description: `${newVcpus} vCPUs ${newMemoryGB} GB RAM`,
       };
 
       // Automatically manage extendedMemoryEnabled flag
@@ -521,7 +522,7 @@ export default function SpreadsheetCalculator() {
     } catch (error) {
       console.error("Error in bulk link generation:", error);
       alert(
-        `Error in bulk link generation: ${
+        `Error in bulk link generation: ${ 
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
@@ -738,7 +739,7 @@ export default function SpreadsheetCalculator() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className={`border-t hover:bg-muted/25 transition-colors ${
+                      className={`border-t hover:bg-muted/25 transition-colors ${ 
                         selectedIds.has(config.id) ? "bg-muted/50" : ""
                       }`}
                       onMouseEnter={() => setHoveredRow(config.id)}
@@ -1028,7 +1029,7 @@ export default function SpreadsheetCalculator() {
                               onKeyDown={(e) =>
                                 e.key === "Enter" && handleCellBlur()
                               }
-                              className={`h-8 text-sm ${
+                              className={`h-8 text-sm ${ 
                                 memoryInfo && !memoryInfo.isValid
                                   ? "border-red-500"
                                   : ""

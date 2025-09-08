@@ -183,17 +183,22 @@ async function intelligentFieldMapping(csvHeaders: string[]): Promise<Record<str
     series: ['series', 'machine_series', 'family'],
     family: ['family', 'machine_family', 'category'],
     description: ['description', 'desc', 'summary'],
-    regionLocation: ['region', 'regionLocation', 'location', 'zone'],
+    regionLocation: ['region', 'regionLocation', 'location', 'zone', 'region_location'],
     vCpus: ['vcpu', 'vcpus', 'cpu', 'cpus', 'cores'],
     cpuPlatform: ['cpuPlatform', 'cpu_platform', 'platform', 'processor'],
     memoryGB: ['memory', 'memoryGB', 'ram', 'mem', 'memory_gb'],
     runningHours: ['hours', 'running_hours', 'runtime', 'uptime'],
     quantity: ['quantity', 'count', 'instances', 'num_instances'],
     os: ['os', 'operating_system', 'system'],
-    sqlLicense: ['sql_license', 'sql', 'license'],
-    'links.onDemand': ['onDemandLink', 'onDemandUrl'],
-    'links.oneYear': ['oneYearLink', 'oneYearUrl', '1yrLink'],
-    'links.threeYear': ['threeYearLink', 'threeYearUrl', '3yrLink'],
+    sqlLicense: ['sql_license', 'sql', 'license', 'sql_licence'],
+    provisioningModel: ['provisioning_model', 'provisioning', 'model'],
+    onDemandPerHour: ['on_demand_per_hour', 'ondemand_hour', 'hourly_rate'],
+    cudOneYearPerHour: ['cud_1_year_per_hour', '1year_hour', 'one_year_hour'],
+    cudThreeYearPerHour: ['cud_3_year_per_hour', '3year_hour', 'three_year_hour'],
+    spotPerHour: ['spot_per_hour', 'spot_hour', 'preemptible_hour'],
+    'links.onDemand': ['onDemandLink', 'onDemandUrl', 'on_demand_link'],
+    'links.oneYear': ['oneYearLink', 'oneYearUrl', '1yrLink', 'one_year_link'],
+    'links.threeYear': ['threeYearLink', 'threeYearUrl', '3yrLink', 'three_year_link'],
   }
 
   const mapping: Record<string, string> = {}
@@ -233,6 +238,9 @@ function transformValue(value: string, targetField: string): any {
     case 'cudOneYearPerHour':
     case 'cudThreeYearPerHour':
     case 'spotPerHour':
+    case 'estimatedCost':
+    case 'onDemandCost':
+    case 'savings':
       return parseFloat(value) || 0
 
     case 'series':
@@ -251,6 +259,13 @@ function transformValue(value: string, targetField: string): any {
       if (regionValue.includes('europe') || regionValue.includes('eu')) return 'europe-west1'
       if (regionValue.includes('asia')) return 'asia-southeast1'
       return 'us-central1'
+
+    case 'provisioningModel':
+      const provisioningValue = value.toLowerCase()
+      if (['regular', 'spot'].includes(provisioningValue)) {
+        return provisioningValue
+      }
+      return 'regular'
 
     case 'os':
       const osValue = value.toLowerCase()
@@ -423,11 +438,20 @@ export const useVmStore = create<VmStore>((set, get) => ({
       "Is Custom",
       "Running Hours",
       "Quantity",
+      "OS",
+      "SQL License",
       "Provisioning Model",
       "On-Demand Per Hour ($)",
       "CUD 1-Year Per Hour ($)",
       "CUD 3-Year Per Hour ($)",
       "Spot Per Hour ($)",
+      "OS On-Demand ($)",
+      "OS 1-Year CUD ($)",
+      "OS 3-Year CUD ($)",
+      "SQL License Cost ($)",
+      "On-Demand Inclusive ($)",
+      "1-Year CUD Inclusive ($)",
+      "3-Year CUD Inclusive ($)",
       "Estimated Cost ($)",
       "On-Demand Cost ($)",
       "Savings ($)",
@@ -453,8 +477,18 @@ export const useVmStore = create<VmStore>((set, get) => ({
         let cudThreeYearPerHour = config.cudThreeYearPerHour;
         let spotPerHour = config.spotPerHour;
 
+        // Get detailed pricing information for all configurations
+        const pricing = getPricing(config);
+        
+        let osOnDemand = pricing.osOnDemand;
+        let os1yCud = pricing.os1yCud;
+        let os3yCud = pricing.os3yCud;
+        let sqlLicenseCost = pricing.sqlLicenseCost;
+        let onDemandInclusive = pricing.onDemandInclusive;
+        let cud1yInclusive = pricing.cud1yInclusive;
+        let cud3yInclusive = pricing.cud3yInclusive;
+
         if (config.isCustom) {
-          const pricing = getPricing(config);
           const monthlyHours = 730;
 
           if (config.runningHours > 0) {
@@ -480,17 +514,26 @@ export const useVmStore = create<VmStore>((set, get) => ({
           config.isCustom,
           config.runningHours,
           config.quantity,
+          config.os || 'linux',
+          config.sqlLicense || 'none',
           config.provisioningModel || "regular",
           onDemandPerHour,
           cudOneYearPerHour,
           cudThreeYearPerHour,
           spotPerHour,
+          osOnDemand,
+          os1yCud,
+          os3yCud,
+          sqlLicenseCost,
+          onDemandInclusive,
+          cud1yInclusive,
+          cud3yInclusive,
           config.estimatedCost,
           config.onDemandCost,
           config.savings,
-          config.links?.onDemand,
-          config.links?.oneYear,
-          config.links?.threeYear,
+          config.links?.onDemand || '',
+          config.links?.oneYear || '',
+          config.links?.threeYear || '',
         ];
         return row.map(toCsvField).join(",");
       }),

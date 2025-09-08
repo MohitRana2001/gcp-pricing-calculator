@@ -308,11 +308,14 @@ export function getPricing(config: VmConfig): PricingDetails {
   let cud1y = 0;
   let cud3y = 0;
   const HOURS_IN_MONTH = 730;
+  const vCpus = parseFloat(String(config.vCpus)) || 0;
+  const memoryGB = parseFloat(String(config.memoryGB)) || 0;
+  const runningHours = parseFloat(String(config.runningHours)) || 0;
 
   const returnZero = { onDemand: 0, cud1y: 0, cud3y: 0, osOnDemand: 0, os1yCud: 0, os3yCud: 0, sqlLicenseCost: 0, onDemandInclusive: 0, cud1yInclusive: 0, cud3yInclusive: 0 };
 
   if (config.isCustom) {
-    let regionKey = config.regionLocation.toLowerCase();
+    const regionKey = config.regionLocation.toLowerCase();
     const pricing = customPricingData[config.series]?.[regionKey];
     if (pricing) {
       const vcpuPricing = pricing['Custom vCPUs']?.pricing;
@@ -322,15 +325,31 @@ export function getPricing(config: VmConfig): PricingDetails {
         let standardMemoryGB = config.memoryGB;
         const seriesConfig = MEMORY_CONFIGS[config.series];
         if (seriesConfig && seriesSupportsExtendedMemory(config.series)) {
-          const standardMemoryLimit = config.vCpus * seriesConfig.maxMemoryPerVcpu;
+          const standardMemoryLimit = vCpus * seriesConfig.maxMemoryPerVcpu;
           if (config.memoryGB > standardMemoryLimit) {
             standardMemoryGB = standardMemoryLimit;
           }
         }
+        
+        const onDemandVcpu = parseFloat(vcpuPricing['Default (USD)']) || 0;
+        const onDemandMem = parseFloat(memoryPricing['Default (USD)']) || 0;
 
-        onDemand = (vcpuPricing['Default (USD)'] * config.vCpus + memoryPricing['Default (USD)'] * standardMemoryGB) * config.runningHours;
-        cud1y = (vcpuPricing['Resource CUDs - 1 Year (USD)'] * config.vCpus + memoryPricing['Resource CUDs - 1 Year (USD)'] * standardMemoryGB) * HOURS_IN_MONTH;
-        cud3y = (vcpuPricing['Resource CUDs - 3 Year (USD)'] * config.vCpus + memoryPricing['Resource CUDs - 3 Year (USD)'] * standardMemoryGB) * HOURS_IN_MONTH;
+        const vcpuPremium = parseFloat(vcpuPricing['Resource CUDs Premium (USD)']) || 0;
+        const memPremium = parseFloat(memoryPricing['Resource CUDs Premium (USD)']) || 0;
+        
+        const vcpu1yPredefined = parseFloat(vcpuPricing['Predefined CUD - 1 Year (USD)']) || 0;
+        const mem1yPredefined = parseFloat(memoryPricing['Predefined CUD - 1 Year (USD)']) || 0;
+        const vcpu3yPredefined = parseFloat(vcpuPricing['Predefined CUD - 3 Year (USD)']) || 0;
+        const mem3yPredefined = parseFloat(memoryPricing['Predefined CUD - 3 Year (USD)']) || 0;
+
+        onDemand = (onDemandVcpu * vCpus + onDemandMem * standardMemoryGB) * runningHours;
+        
+        if (vcpu1yPredefined > 0 && mem1yPredefined > 0) {
+          cud1y = ((vcpu1yPredefined + vcpuPremium) * vCpus + (mem1yPredefined + memPremium) * standardMemoryGB) * HOURS_IN_MONTH;
+        }
+        if (vcpu3yPredefined > 0 && mem3yPredefined > 0) {
+          cud3y = ((vcpu3yPredefined + vcpuPremium) * vCpus + (mem3yPredefined + memPremium) * standardMemoryGB) * HOURS_IN_MONTH;
+        }
       }
     } else {
       return returnZero;
@@ -387,14 +406,13 @@ export function getPricing(config: VmConfig): PricingDetails {
 
     if (config.memoryGB > standardMemoryLimit) {
       const extraMemoryGB = config.memoryGB - standardMemoryLimit;
-      let regionKey = config.regionLocation.toLowerCase();
+      const regionKey = config.regionLocation.toLowerCase();
       const pricing = customPricingData[config.series]?.[regionKey]?.['Extended custom memory']?.pricing;
 
       if (pricing) {
         extendedMemoryCostOnDemand = (pricing['Default (USD)'] || 0) * extraMemoryGB * config.runningHours;
-        console.log(pricing['Resource CUDs - 1 Year (USD)'], pricing['Resource CUDs - 3 Year (USD)'])
-        extendedMemoryCost1y = (pricing['Resource CUDs - 1 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
-        extendedMemoryCost3y = (pricing['Resource CUDs - 3 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
+        extendedMemoryCost1y = (pricing['Resource CUD - 1 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
+        extendedMemoryCost3y = (pricing['Resource CUD - 3 Year (USD)'] || 0) * extraMemoryGB * HOURS_IN_MONTH;
 
         if (config.provisioningModel === 'spot') {
           extendedMemoryCost1y = 0;
