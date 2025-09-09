@@ -1208,9 +1208,6 @@ export default function SpreadsheetCalculator() {
                               SQL Server Standard
                             </SelectItem>
                             <SelectItem value="web">SQL Server Web</SelectItem>
-                            <SelectItem value="express">
-                              SQL Server Express
-                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
