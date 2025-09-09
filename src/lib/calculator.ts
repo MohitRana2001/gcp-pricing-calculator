@@ -333,7 +333,7 @@ function getSlesCost(machineName: string, runningHours: number): number {
   if (machineName === 'f1-micro' || machineName === 'g1-small') {
     costPerHour = 0.02;
   }
-  return costPerHour * runningHours;
+  return costPerHour * runningHours; 
 }
 
 function getSlesSapCost(vCpus: number, runningHours: number): number {
