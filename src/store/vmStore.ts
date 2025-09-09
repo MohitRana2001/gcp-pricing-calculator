@@ -61,12 +61,12 @@ function calculateCosts(config: any): {
   // Create a complete config object with defaults for missing optional fields
   const completeConfig: VmConfig = {
     ...config,
-    id: config.id || 'temp', // Temporary ID for calculation
+    id: config.id || 'temp',
     estimatedCost: 0,
     onDemandCost: 0,
     savings: 0,
-    os: config.os || 'linux', // Default to linux if not provided
-    sqlLicense: config.sqlLicense || 'none', // Default to none if not provided
+    os: config.os || 'linux',
+    sqlLicense: config.sqlLicense || 'none',
     provisioningModel: config.provisioningModel || 'regular',
   } as VmConfig
 

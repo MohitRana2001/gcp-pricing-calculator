@@ -994,8 +994,9 @@ export default function SpreadsheetCalculator() {
                               e.key === "Enter" && handleCellBlur()
                             }
                             className="h-8 text-sm"
-                            min="1"
+                            min="2"
                             max="96"
+                            step="2"
                             disabled={!supportsCustom}
                             autoFocus
                           />
