@@ -205,7 +205,7 @@ export function getAllowedMemoryRange(series: string, vCpus: number): { min: num
   else {
     max = config.maxMemoryGB;
   }
-  
+
   return { min: Math.min(min, max), max };
 }
 
@@ -257,7 +257,7 @@ export async function loadCustomPricingData(): Promise<void> {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     customPricingData = await response.json();
-    console.log(customPricingData)
+    // console.log(customPricingData)
   } catch (error) {
     console.error('Failed to load custom pricing data:', error);
   }
@@ -303,6 +303,60 @@ function getRhel7ElsCost(vCpus: number, runningHours: number): number {
   return vcpuCostPerHour * vCpus * runningHours;
 }
 
+function getRhelCost(vCpus: number, runningHours: number): number {
+  let costPerHourPerCore = 0;
+  if (vCpus <= 8) {
+    costPerHourPerCore = 0.0144;
+  } else if (vCpus >= 9 && vCpus <= 127) {
+    costPerHourPerCore = 0.0108;
+  } else {
+    costPerHourPerCore = 0.0096;
+  }
+  // The total cost is (price per core) * (number of cores/vCPUs) * (running hours)
+  return costPerHourPerCore * vCpus * runningHours;
+}
+
+function getRhelSapCost(vCpus: number, runningHours: number): number {
+  let costPerHourPerCore = 0;
+  if (vCpus <= 8) {
+    costPerHourPerCore = 0.0225;
+  } else if (vCpus >= 9 && vCpus <= 127) {
+    costPerHourPerCore = 0.01625;
+  } else {
+    costPerHourPerCore = 0.01500;
+  }
+  return costPerHourPerCore * vCpus * runningHours;
+}
+
+function getSlesCost(machineName: string, runningHours: number): number {
+  let costPerHour = 0.11; // Default for most machine types
+  if (machineName === 'f1-micro' || machineName === 'g1-small') {
+    costPerHour = 0.02;
+  }
+  return costPerHour * runningHours;
+}
+
+function getSlesSapCost(vCpus: number, runningHours: number): number {
+  let costPerHour = 0;
+  if (vCpus <= 2) {
+    costPerHour = 0.17;
+  } else if (vCpus >= 3 && vCpus <= 4) {
+    costPerHour = 0.34;
+  } else {
+    costPerHour = 0.41;
+  }
+  return costPerHour * runningHours;
+}
+
+function getWindowsCost(machineName: string, runningHours: number, vcpus: number): number {
+  let costPerHour = 0.046;
+  if (machineName === 'f1-micro' || machineName === 'g1-small') {
+    costPerHour = 0.023;
+  }
+  console.log( "windows-cost", costPerHour * vcpus * runningHours);
+  return costPerHour * vcpus * runningHours;
+}
+
 export function getPricing(config: VmConfig): PricingDetails {
   let onDemand = 0;
   let cud1y = 0;
@@ -330,20 +384,20 @@ export function getPricing(config: VmConfig): PricingDetails {
             standardMemoryGB = standardMemoryLimit;
           }
         }
-        
+
         const onDemandVcpu = parseFloat(vcpuPricing['Default (USD)']) || 0;
         const onDemandMem = parseFloat(memoryPricing['Default (USD)']) || 0;
 
         const vcpuPremium = parseFloat(vcpuPricing['Resource CUDs Premium (USD)']) || 0;
         const memPremium = parseFloat(memoryPricing['Resource CUDs Premium (USD)']) || 0;
-        
+
         const vcpu1yPredefined = parseFloat(vcpuPricing['Predefined CUD - 1 Year (USD)']) || 0;
         const mem1yPredefined = parseFloat(memoryPricing['Predefined CUD - 1 Year (USD)']) || 0;
         const vcpu3yPredefined = parseFloat(vcpuPricing['Predefined CUD - 3 Year (USD)']) || 0;
         const mem3yPredefined = parseFloat(memoryPricing['Predefined CUD - 3 Year (USD)']) || 0;
 
         onDemand = (onDemandVcpu * vCpus + onDemandMem * standardMemoryGB) * runningHours;
-        
+
         if (vcpu1yPredefined > 0 && mem1yPredefined > 0) {
           cud1y = ((vcpu1yPredefined + vcpuPremium) * vCpus + (mem1yPredefined + memPremium) * standardMemoryGB) * HOURS_IN_MONTH;
         }
@@ -378,16 +432,29 @@ export function getPricing(config: VmConfig): PricingDetails {
     : machineTypesData.find(m => m.name === config.name && m.regionLocation === config.regionLocation);
 
   if (machineForOs) {
+    console.log(config.os);
     switch (config.os) {
-      case 'windows': osOnDemand = os1yCud = os3yCud = Number(machineForOs.monthWindows) || 0; break;
-      case 'rhel': osOnDemand = Number(machineForOs.monthRhel) || 0; os1yCud = Number(machineForOs.monthRhel1yCud) || 0; os3yCud = Number(machineForOs.monthRhel3yCud) || 0; break;
-      case 'rhel_sap': osOnDemand = Number(machineForOs.monthRhelSap) || 0; os1yCud = Number(machineForOs.monthRhelSap1yCud) || 0; os3yCud = Number(machineForOs.monthRhelSap3yCud) || 0; break;
-      case 'sles': osOnDemand = Number(machineForOs.monthSles) || 0; os1yCud = Number(machineForOs.monthSlesSap1yCud) || 0; os3yCud = Number(machineForOs.monthSlesSap3yCud) || 0; break;
-      case 'sles_sap': osOnDemand = Number(machineForOs.monthSlesSap) || 0; os1yCud = Number(machineForOs.monthSlesSap1yCud) || 0; os3yCud = Number(machineForOs.monthSlesSap3yCud) || 0; break;
+      case 'windows': 
+        osOnDemand = os1yCud = os3yCud = getWindowsCost(config.name, runningHours, vCpus);
+        break;
+      case 'rhel':
+        osOnDemand = os1yCud = os3yCud = getRhelCost(vCpus, runningHours);
+        break;
+      case 'rhel_sap':
+        osOnDemand = os1yCud = os3yCud = getRhelSapCost(vCpus, runningHours);
+        break;
+      case 'sles':
+        osOnDemand = os1yCud = os3yCud = getSlesCost(config.name, runningHours);
+        break;
+      case 'sles_sap':
+        osOnDemand = os1yCud = os3yCud = getSlesSapCost(vCpus, runningHours);
+        break;
       case 'ubuntu_pro': osOnDemand = os1yCud = os3yCud = getUbuntuProCost(config.vCpus, config.memoryGB, config.runningHours); break;
       case 'rhel_7_els': osOnDemand = os1yCud = os3yCud = getRhel7ElsCost(config.vCpus, config.runningHours); break;
     }
   }
+
+  console.log("debug1" ,osOnDemand)
 
   let sqlLicenseCost = 0;
   if (config.os === 'windows') {
@@ -422,18 +489,19 @@ export function getPricing(config: VmConfig): PricingDetails {
     }
   }
 
+  console.log(extendedMemoryCostOnDemand, onDemand , osOnDemand ,sqlLicenseCost, extendedMemoryCostOnDemand);
+
   return {
     onDemand, cud1y, cud3y,
     osOnDemand, os1yCud, os3yCud,
     sqlLicenseCost,
-    onDemandInclusive: onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCostOnDemand,
+    onDemandInclusive: (sqlLicenseCost != 0) ? onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCostOnDemand : onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCostOnDemand,
     cud1yInclusive: cud1y + os1yCud + sqlLicenseCost + extendedMemoryCost1y,
     cud3yInclusive: cud3y + os3yCud + sqlLicenseCost + extendedMemoryCost3y,
   };
 }
 
 
-// Get CPU platform based on series
 function getCpuPlatform(series: string): string {
   const platforms: Record<string, string> = {
     'n2': 'Intel Cascade Lake',

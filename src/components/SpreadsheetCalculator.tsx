@@ -78,12 +78,12 @@ export default function SpreadsheetCalculator() {
 
   const handleAddConfiguration = () => {
     addConfiguration({
-      name: "e2-standard-2",
-      series: "e2",
+      name: "n2d-highcpu-8",
+      series: "n2d",
       family: "General-purpose",
       description: "2 vCPUs 8 GB RAM",
       regionLocation: "asia-south1",
-      vCpus: 2,
+      vCpus: 8,
       cpuPlatform: "Intel Cascade Lake",
       memoryGB: 8,
       isCustom: false,
