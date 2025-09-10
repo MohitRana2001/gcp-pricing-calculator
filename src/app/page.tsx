@@ -4,20 +4,20 @@ import Image from "next/image";
 import SpreadsheetCalculator from "@/components/SpreadsheetCalculator";
 import QuickActions from "@/components/QuickActions";
 import { useVmStore } from "@/store/vmStore";
+import { Badge } from "@/components/ui/badge";
 import { Server, HardDrive, Database, Sparkles } from "lucide-react";
 
 export default function Home() {
-  const { selectedService } = useVmStore();
+  const { selectedService, setSelectedService } = useVmStore();
 
   const renderMainContent = () => {
     if (!selectedService) {
-      // Landing state - no service selected
       return (
         <div className="flex flex-col items-center justify-center min-h-[600px] text-center">
           <div className="mb-8">
             <Sparkles className="h-16 w-16 text-primary mx-auto mb-4 opacity-50" />
             <h2 className="text-3xl font-bold text-gray-900 mb-2">
-              Welcome to GCP Cost Calculator
+              Welcome to Pocket Calculator
             </h2>
             <p className="text-lg text-gray-600 max-w-md mx-auto">
               Select a service from the sidebar to start estimating costs for
@@ -26,7 +26,10 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl">
-            <div className="p-6 border-2 border-dashed border-gray-200 rounded-lg">
+            <div
+              className="p-6 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-primary hover:bg-blue-50 transition-all duration-200"
+              onClick={() => setSelectedService("compute-engine")}
+            >
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 w-fit mx-auto mb-4">
                 <Server className="h-8 w-8 text-blue-500" />
               </div>
@@ -130,12 +133,15 @@ export default function Home() {
                 />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  GCP Cost Calculator
-                </h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    Pocket Calculator
+                  </h1>
+                  <Badge variant="secondary">Alpha release</Badge>
+                </div>
                 <p className="text-sm text-gray-600">
-                  Professional cost estimation for Google Cloud Platform
-                  services
+                  A simple, time-efficient, easy to use & tailored to specific
+                  needs
                 </p>
               </div>
             </div>

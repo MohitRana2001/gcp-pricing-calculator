@@ -125,7 +125,6 @@ export default function SpreadsheetCalculator() {
       none: "onDemand",
       "1-year": "oneYear",
       "3-years": "threeYear",
-
     };
     const linkType = linkTypeMap[commitment];
 
@@ -169,9 +168,7 @@ export default function SpreadsheetCalculator() {
     } catch (error) {
       console.error(`Failed to generate ${commitment} link:`, error);
       alert(
-        `Error generating link: ${ 
-
-          error instanceof Error ? error.message : "Unknown error"
+        `Error generating link: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -201,13 +198,13 @@ export default function SpreadsheetCalculator() {
       const promises = commitmentTypes.map(async (commitment) => {
         try {
           console.log(`Generating ${commitment} link for ${config.name}...`);
-          
+
           // Create an enhanced config with the commitment information
           const configWithCommitment = {
             ...config,
             commitment: commitment
           };
-          
+
           const response = await fetch("/api/generate-gcp-url", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -275,8 +272,7 @@ export default function SpreadsheetCalculator() {
         alert(`✅ Successfully generated all ${successCount} links!`);
       } else if (successCount > 0) {
         alert(
-          `⚠️ Generated ${successCount}/${
-            commitmentTypes.length
+          `⚠️ Generated ${successCount}/${commitmentTypes.length
           } links. Errors: ${errorMessages.join("; ")}`
         );
       } else {
@@ -287,8 +283,7 @@ export default function SpreadsheetCalculator() {
     } catch (error) {
       console.error("Error in parallel link generation:", error);
       alert(
-        `Error generating links: ${ 
-          error instanceof Error ? error.message : "Unknown error"
+        `Error generating links: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -385,7 +380,7 @@ export default function SpreadsheetCalculator() {
   // Bulk link generation for selected configurations
   const handleGenerateBulkLinks = async (enableDebug: boolean = false) => {
     const selectedConfigs = configurations.filter(config => selectedIds.has(config.id));
-    
+
     if (selectedConfigs.length === 0) {
       alert("Please select at least one configuration to generate bulk links.");
       return;
@@ -407,9 +402,9 @@ export default function SpreadsheetCalculator() {
 
     try {
       console.log(`🚀 Starting bulk link generation for ${selectedConfigs.length} configurations...`);
-      
+
       // Create all promises for parallel execution
-      const allPromises = selectedConfigs.flatMap(config => 
+      const allPromises = selectedConfigs.flatMap(config =>
         commitmentTypes.map(async (commitment) => {
           try {
             // Create an enhanced config with the commitment information
@@ -417,7 +412,7 @@ export default function SpreadsheetCalculator() {
               ...config,
               commitment: commitment
             };
-            
+
             const response = await fetch("/api/generate-gcp-url", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -438,10 +433,10 @@ export default function SpreadsheetCalculator() {
 
             const result = await response.json();
             if (result.success && result.shareUrl) {
-              return { 
-                configId: config.id, 
-                commitment, 
-                url: result.shareUrl, 
+              return {
+                configId: config.id,
+                commitment,
+                url: result.shareUrl,
                 success: true,
                 configName: config.name
               };
@@ -474,7 +469,7 @@ export default function SpreadsheetCalculator() {
 
       results.forEach((result) => {
         const linkType = linkTypeMap[result.commitment];
-        
+
         if (!linkUpdates[result.configId]) {
           linkUpdates[result.configId] = {};
         }
@@ -495,8 +490,8 @@ export default function SpreadsheetCalculator() {
       Object.entries(linkUpdates).forEach(([configId, links]) => {
         const config = configurations.find(c => c.id === configId);
         if (config && links && Object.keys(links).length > 0) {
-          updateConfiguration(configId, { 
-            links: { ...config.links, ...links } 
+          updateConfiguration(configId, {
+            links: { ...config.links, ...links }
           });
         }
       });
@@ -510,22 +505,21 @@ export default function SpreadsheetCalculator() {
           const config = configurations.find(c => c.id === configId);
           return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
         }).join('\n');
-        
+
         alert(`⚠️ Bulk generation completed with partial success!\n\n✅ Success: ${totalSuccessCount}/${totalRequests} links\n❌ Errors: ${totalErrorCount}\n\nError details:\n${errorDetails}`);
       } else {
         const errorDetails = Object.entries(errorsByConfig).map(([configId, errors]) => {
           const config = configurations.find(c => c.id === configId);
           return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
         }).join('\n');
-        
+
         alert(`❌ Bulk generation failed for all configurations.\n\nError details:\n${errorDetails}`);
       }
 
     } catch (error) {
       console.error("Error in bulk link generation:", error);
       alert(
-        `Error in bulk link generation: ${ 
-          error instanceof Error ? error.message : "Unknown error"
+        `Error in bulk link generation: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -589,7 +583,7 @@ export default function SpreadsheetCalculator() {
           >
             Generate Bulk Links
           </Button>
-          
+
           <input
             ref={fileInputRef}
             type="file"
@@ -732,7 +726,6 @@ export default function SpreadsheetCalculator() {
                     oneYear: false,
                     threeYear: false,
                   };
-
                   const supportsCustom = seriesSupportsCustom(config.series);
 
                   return (
@@ -742,9 +735,8 @@ export default function SpreadsheetCalculator() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className={`border-t hover:bg-muted/25 transition-colors ${ 
-                        selectedIds.has(config.id) ? "bg-muted/50" : ""
-                      }`}
+                      className={`border-t hover:bg-muted/25 transition-colors ${selectedIds.has(config.id) ? "bg-muted/50" : ""
+                        }`}
                       onMouseEnter={() => setHoveredRow(config.id)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
@@ -829,7 +821,7 @@ export default function SpreadsheetCalculator() {
                               config.regionLocation
                             );
                             const newSeriesSupportsCustom = seriesSupportsCustom(value);
-                            
+
                             if (availableTypes.length > 0) {
                               const firstType = availableTypes[0];
                               updateConfiguration(config.id, {
@@ -981,17 +973,20 @@ export default function SpreadsheetCalculator() {
                       {/* vCPUs */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "vCpus" ? (
+                          editingCell?.field === "vCpus" ? (
                           <Input
                             type="number"
                             value={config.vCpus}
-                            onChange={(e) =>
-                              handleVcpuMemoryChange(
-                                config.id,
-                                "vCpus",
-                                parseInt(e.target.value) || 1
-                              )
-                            }
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value, 10);
+                              if (e.target.value === "") {
+                                handleVcpuMemoryChange(config.id, "vCpus", 2);
+                                return;
+                              }
+                              if (!isNaN(value) && value % 2 === 0) {
+                                handleVcpuMemoryChange(config.id, "vCpus", value);
+                              }
+                            }}
                             onBlur={handleCellBlur}
                             onKeyDown={(e) =>
                               e.key === "Enter" && handleCellBlur()
@@ -1017,7 +1012,7 @@ export default function SpreadsheetCalculator() {
                       {/* Memory (GB) */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "memoryGB" ? (
+                          editingCell?.field === "memoryGB" ? (
                           <div>
                             <Input
                               type="number"
@@ -1033,11 +1028,10 @@ export default function SpreadsheetCalculator() {
                               onKeyDown={(e) =>
                                 e.key === "Enter" && handleCellBlur()
                               }
-                              className={`h-8 text-sm ${ 
-                                memoryInfo && !memoryInfo.isValid
+                              className={`h-8 text-sm ${memoryInfo && !memoryInfo.isValid
                                   ? "border-red-500"
                                   : ""
-                              }`}
+                                }`}
                               min={memoryInfo?.min || 1}
                               max={memoryInfo?.max || 384}
                               step="0.25"
@@ -1092,7 +1086,7 @@ export default function SpreadsheetCalculator() {
                       {/* Running Hours */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "runningHours" ? (
+                          editingCell?.field === "runningHours" ? (
                           <Input
                             type="number"
                             value={config.runningHours}
@@ -1127,7 +1121,7 @@ export default function SpreadsheetCalculator() {
                       {/* Quantity */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "quantity" ? (
+                          editingCell?.field === "quantity" ? (
                           <Input
                             type="number"
                             value={config.quantity}
