@@ -8,14 +8,15 @@
     "start": "next start",
     "lint": "next lint",
     "test:automation": "node -e \"import('./src/lib/gcpUrlGenerator.js').then(m => m.testAutomation())\"",
-    "setup:playwright": "npx playwright install"
+    "setup:playwright": "npx playwright install",
+    "troubleshoot:vm": "node scripts/vm-troubleshoot.js",
+    "setup:vm": "bash scripts/vm-setup.sh"
   },
   "dependencies": {
     "@playwright/test": "^1.54.2",
     "@radix-ui/react-checkbox": "^1.0.4",
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-slot": "^1.0.2",
-    "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "autoprefixer": "^10.4.0",
@@ -25,6 +26,7 @@
     "eslint": "^8.0.0",
     "eslint-config-next": "^15.0.0",
     "framer-motion": "^10.16.0",
+    "google-auth-library": "^9.15.1",
     "lucide-react": "^0.294.0",
     "next": "^15.0.0",
     "playwright": "^1.54.2",
@@ -34,7 +36,11 @@
     "tailwind-merge": "^2.0.0",
     "tailwindcss": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.0.0",
     "zustand": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
   }
 }

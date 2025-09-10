@@ -1,147 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { VmConfig } from '@/lib/calculator';
-import { runGcpCalculatorAutomation, EstimateRequest, OutputJSON } from '@/lib/gcpCalculatorAutomation';
-import { vmConfigsToEstimateRequest, validateVmConfigsForAutomation, getAutomationErrorHelp } from '@/lib/gcpConfigAdapter';
+import { spawn } from 'child_process';
+import path from 'path';
 
-// Interface for the API request
-interface GenerateUrlRequest {
-  configurations: VmConfig[];
-  commitment: 'none' | '1 year' | '3 years'; // New field for specific commitment
-  options?: {
-    headless?: boolean;
-    timeout?: number;
-    wantCsvLink?: boolean;
-  };
-}
-
-// Interface for the API response
-interface GenerateUrlResponse {
-  success: boolean;
-  shareUrl?: string;
-  csvDownloadUrl?: string | null;
-  error?: string;
-  errorHelp?: string;
-  details?: {
-    configurationsProcessed: number;
-    timestamp: string;
-    summary?: {
-      totalCost?: string;
-      lineItems?: Array<{
-        service: string;
-        region: string;
-        machineType: string;
-        instances: number;
-        subtotal?: string;
-      }>;
-    };
-  };
-  artifacts?: {
-    screenshots?: {
-      estimatePanel?: string;
-      shareMenu?: string;
-      lastError?: string;
-    };
-    logs?: string;
-  };
-}
-
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest) {
   try {
-    console.log(`🚀 API STEP 1: POST request received at /api/generate-gcp-url`);
-    console.log(`📝 API STEP 1.1: Request headers:`, Object.fromEntries(request.headers.entries()));
+    const body = await req.json();
+    const { configurations, commitment = "none" } = body;
     
-    const body: GenerateUrlRequest = await request.json();
-    console.log(`📋 API STEP 2: Request body parsed successfully`);
-    console.log(`📋 API STEP 2.1: Raw body:`, JSON.stringify(body, null, 2));
+    // We'll use the first configuration from the spreadsheet row
+    const config = configurations[0];
+    console.log('Configuration received:', config);
+    console.log('Commitment type:', commitment);
+    console.log('Config commitment field:', config.commitment);
     
-    const { configurations = [], commitment = 'none', options = {} } = body;
-    console.log(`📊 API STEP 2.2: Extracted ${configurations.length} configurations, commitment: ${commitment}, and options:`, options);
-
-    console.log(`🤖 API STEP 3: Starting GCP Calculator automation for ${configurations.length} configurations`);
-
-    // Validate configurations
-    const validation = validateVmConfigsForAutomation(configurations);
-    if (!validation.isValid) {
-      const errorMessages = validation.errors.map(err => 
-        `${err.configName}: ${err.errors.join(', ')}`
-      ).join('; ');
-      
-      return NextResponse.json<GenerateUrlResponse>({
-        success: false,
-        error: `Configuration validation failed: ${errorMessages}`,
-        errorHelp: 'Please check that all configurations have valid machine types, regions, and other required fields.'
-      }, { status: 400 });
-    }
-
-    // Convert VmConfigs to EstimateRequest format
-    const estimateRequest = vmConfigsToEstimateRequest(configurations, {
-      headless: options.headless,
-      timeoutMs: options.timeout,
-      service: 'Compute Engine',
-      wantCsvLink: options.wantCsvLink || false,
-      commitment: commitment, // Pass down the specific commitment
-    });
-
-    // Run the advanced Playwright automation
-    console.log('🎭 Running advanced Playwright automation...');
-    const result: OutputJSON = await runGcpCalculatorAutomation({
-      ...estimateRequest,
-      collectArtifacts: false, // do not store artifacts in production per requirement
-    });
-
-    if (!result.success) {
-      const errorHelp = getAutomationErrorHelp(result.error || '');
-      
-      return NextResponse.json<GenerateUrlResponse>({
-        success: false,
-        error: result.error || 'Unknown automation error',
-        errorHelp,
-        artifacts: {
-          screenshots: result.artifacts?.screenshots,
-          logs: result.artifacts?.consoleLogs
-        }
-      }, { status: 500 });
-    }
-
-    // Transform the result to match our API response format
-    const response: GenerateUrlResponse = {
-      success: true,
-      shareUrl: result.shareUrl!,
-      csvDownloadUrl: result.csvDownloadUrl,
-      details: {
-        configurationsProcessed: configurations.length,
-        timestamp: new Date().toISOString(),
-        summary: result.estimateSummary ? {
-          totalCost: result.estimateSummary.totalText || undefined,
-          lineItems: result.estimateSummary.lineItems?.map(item => ({
-            service: item.service,
-            region: item.region,
-            machineType: item.machineType,
-            instances: item.instances,
-            subtotal: item.subtotalText || undefined
-          }))
-        } : undefined
-      },
-      artifacts: {
-        screenshots: result.artifacts?.screenshots,
-        logs: result.artifacts?.consoleLogs
-      }
+    // Enhanced config to ensure all required fields are present
+    const enhancedConfig = {
+      ...config,
+      os: config.os || 'linux',
+      provisioningModel: config.provisioningModel || 'regular',
+      runningHours: config.runningHours || 730,
+      quantity: config.quantity || 1,
+      commitment: commitment // Add commitment to the config
     };
 
-    console.log(`✅ Successfully generated GCP calculator URL: ${result.shareUrl}`);
-    console.log(`📊 Processed ${configurations.length} configurations`);
+    console.log('Enhanced configuration:', enhancedConfig);
     
-    return NextResponse.json<GenerateUrlResponse>(response);
+    // IMPORTANT: Construct the full path to your Python script
+    const scriptPath = path.join(process.cwd(), 'python_scripts', 'generate_link.py');
+
+    // Use a Promise to handle the asynchronous Python script execution
+    const runPythonScript = new Promise<string>((resolve, reject) => {
+      const pythonProcess = spawn('python3', [
+        scriptPath,
+        JSON.stringify(enhancedConfig),
+      ]);
+
+      let shareUrl = '';
+      let errorMessage = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        shareUrl += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        errorMessage += data.toString();
+        console.error(`Python Script Error: ${data}`);
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Script failed with code ${code}: ${errorMessage}`));
+        } else {
+          resolve(shareUrl.trim());
+        }
+      });
+      
+      pythonProcess.on('error', (err) => {
+        reject(new Error(`Failed to start Python script: ${err.message}`));
+      });
+    });
+
+    // Await the result from the Python script
+    const generatedUrl = await runPythonScript;
+
+    // Send the successful response back to the frontend
+    return NextResponse.json({ 
+      success: true, 
+      shareUrl: generatedUrl 
+    });
 
   } catch (error) {
-    console.error('❌ Error in GCP URL generation:', error);
-    
-    const errorHelp = getAutomationErrorHelp(error instanceof Error ? error.message : 'Unknown error');
-    
-    return NextResponse.json<GenerateUrlResponse>({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-      errorHelp
-    }, { status: 500 });
+    console.error('API Route Error:', error);
+    const message = error instanceof Error ? error.message : 'Internal Server Error';
+    return NextResponse.json(
+      { success: false, error: message }, 
+      { status: 500 }
+    );
   }
 }

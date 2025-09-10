@@ -21,12 +21,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useVmStore, ServiceType } from "@/store/vmStore";
-import {
-  generateIndividualUrls,
-  generateBulkUrl,
-  openOfficialCalculatorForResearch,
-  analyzeGcpUrl,
-} from "@/lib/gcpUrlGenerator";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,7 +30,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import GcpUrlGeneratorButtons from "./GcpUrlGeneratorButtons";
 
 export default function QuickActions() {
   const {
@@ -192,65 +185,6 @@ export default function QuickActions() {
         </CardContent>
       </Card>
 
-      {/* Cost Summary */}
-      {/* {getTotalServicesCost() > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Cost Summary
-            </CardTitle>
-            <CardDescription>
-              Total estimated monthly costs across all services
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {getComputeEngineCost() > 0 && (
-              <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="flex items-center gap-2">
-                  <Server className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm font-medium">Compute Engine</span>
-                </div>
-                <span className="font-semibold text-blue-600">
-                  {formatCurrency(getComputeEngineCost())}
-                </span>
-              </div>
-            )}
-
-            {getCloudStorageCost() > 0 && (
-              <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
-                <div className="flex items-center gap-2">
-                  <HardDrive className="h-4 w-4 text-green-500" />
-                  <span className="text-sm font-medium">Cloud Storage</span>
-                </div>
-                <span className="font-semibold text-green-600">
-                  {formatCurrency(getCloudStorageCost())}
-                </span>
-              </div>
-            )}
-
-            {getCloudSQLCost() > 0 && (
-              <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-200">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-purple-500" />
-                  <span className="text-sm font-medium">Cloud SQL</span>
-                </div>
-                <span className="font-semibold text-purple-600">
-                  {formatCurrency(getCloudSQLCost())}
-                </span>
-              </div>
-            )}
-
-            <div className="flex justify-between items-center p-3 bg-primary/10 rounded-lg border border-primary/20">
-              <span className="text-sm font-semibold">Total Monthly Cost</span>
-              <span className="font-bold text-primary text-lg">
-                {formatCurrency(getTotalServicesCost())}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )} */}
-
       {/* Bulk Actions - Only show when Compute Engine is selected and has configurations */}
       {selectedService === "compute-engine" && configurations.length > 0 && (
         <Card>
@@ -361,107 +295,6 @@ export default function QuickActions() {
           </CardContent>
         </Card>
       )}
-
-      {/* Import/Export - Only show when Compute Engine is selected */}
-      {/* {selectedService === "compute-engine" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Import/Export
-            </CardTitle>
-            <CardDescription>
-              Manage your Compute Engine configurations with CSV files
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleImportCSV}
-              style={{ display: "none" }}
-              id="csv-import"
-            />
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={() => document.getElementById("csv-import")?.click()}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import CSV
-            </Button>
-
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={exportToCSV}
-              disabled={configurations.length === 0}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
-          </CardContent>
-        </Card>
-      )} */}
-
-      {/* GCP Calculator Integration - Only show when Compute Engine is selected */}
-      {/* {selectedService === "compute-engine" && configurations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Share2 className="h-5 w-5" />
-              Share via GCP Calculator
-            </CardTitle>
-            <CardDescription>
-              Generate links using browser automation to fill the official
-              calculator
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <GcpUrlGeneratorButtons configurations={configurations} />
-
-            <div className="text-xs text-muted-foreground space-y-1">
-              <div>• Uses browser automation to fill official calculator</div>
-              <div>
-                • Bulk link includes all {configurations.length} configurations
-              </div>
-              <div>• Individual links available in table actions</div>
-              <div>• Process may take 10-30 seconds per configuration</div>
-            </div>
-
-            {process.env.NODE_ENV === "development" && (
-              <div className="border-t pt-3 space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Development Tools:
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start h-8"
-                  onClick={() => openOfficialCalculatorForResearch()}
-                >
-                  <BarChart3 className="h-3 w-3 mr-2" />
-                  Open GCP Calculator
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start h-8"
-                  onClick={async () => {
-                    const { testAutomation } = await import(
-                      "@/lib/gcpUrlGenerator"
-                    );
-                    testAutomation();
-                  }}
-                >
-                  <ExternalLink className="h-3 w-3 mr-2" />
-                  Test Automation
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )} */}
 
       {/* Multi-Cloud Comparison */}
       <Card>

@@ -14,7 +14,9 @@ import { useVmStore, LinkLoadingState } from "@/store/vmStore";
 import {
   REGIONS,
   MACHINE_SERIES,
+  MEMORY_CONFIGS,
   VmConfig,
+  seriesSupportsCustom,
   seriesSupportsExtendedMemory,
   getAllowedMemoryRange,
   getAvailableMachineTypes,
@@ -38,7 +40,7 @@ interface EditingCell {
   field: string;
 }
 
-type CommitmentType = "none" | "1 year" | "3 years";
+type CommitmentType = "none" | "1-year" | "3-years";
 
 export default function SpreadsheetCalculator() {
   const {
@@ -76,12 +78,12 @@ export default function SpreadsheetCalculator() {
 
   const handleAddConfiguration = () => {
     addConfiguration({
-      name: "e2-standard-2",
-      series: "e2",
+      name: "n2d-highcpu-8",
+      series: "n2d",
       family: "General-purpose",
       description: "2 vCPUs 8 GB RAM",
-      regionLocation: "us-central1",
-      vCpus: 2,
+      regionLocation: "asia-south1",
+      vCpus: 8,
       cpuPlatform: "Intel Cascade Lake",
       memoryGB: 8,
       isCustom: false,
@@ -94,6 +96,7 @@ export default function SpreadsheetCalculator() {
       os: "linux",
       sqlLicense: "none",
       provisioningModel: "regular",
+      commitment: "none",
     });
   };
 
@@ -115,23 +118,35 @@ export default function SpreadsheetCalculator() {
 
   const handleGenerateLink = async (
     config: VmConfig,
-    commitment: CommitmentType
+    commitment: CommitmentType,
+    enableDebug: boolean = false
   ) => {
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
       none: "onDemand",
-      "1 year": "oneYear",
-      "3 years": "threeYear",
+      "1-year": "oneYear",
+      "3-years": "threeYear",
+
     };
     const linkType = linkTypeMap[commitment];
 
     setLinkLoadingState(config.id, linkType, true);
     try {
+
+      const configWithCommitment = {
+        ...config,
+        commitment: commitment
+      };
+
       const response = await fetch("/api/generate-gcp-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          configurations: [config],
+          configurations: [configWithCommitment],
           commitment: commitment,
+          options: {
+            debug: enableDebug,
+            timeout: 60000,
+          },
         }),
       });
 
@@ -147,18 +162,140 @@ export default function SpreadsheetCalculator() {
           [linkType]: result.shareUrl,
         };
         updateConfiguration(config.id, { links: linkUpdate });
+        console.log(`Successfully generated ${commitment} link for ${config.name}`);
       } else {
         throw new Error(result.error || "API did not return a shareable URL.");
       }
     } catch (error) {
       console.error(`Failed to generate ${commitment} link:`, error);
       alert(
-        `Error generating link: ${
+        `Error generating link: ${ 
+
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
       setLinkLoadingState(config.id, linkType, false);
+    }
+  };
+
+  // Parallel link generation for all commitment types
+  const handleGenerateAllLinks = async (
+    config: VmConfig,
+    enableDebug: boolean = false
+  ) => {
+    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-years"];
+    const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
+      none: "onDemand",
+      "1-year": "oneYear",
+      "3-years": "threeYear",
+    };
+
+    // Set all loading states to true
+    commitmentTypes.forEach((commitment) => {
+      setLinkLoadingState(config.id, linkTypeMap[commitment], true);
+    });
+
+    try {
+      // Generate all links in parallel
+      const promises = commitmentTypes.map(async (commitment) => {
+        try {
+          console.log(`Generating ${commitment} link for ${config.name}...`);
+          
+          // Create an enhanced config with the commitment information
+          const configWithCommitment = {
+            ...config,
+            commitment: commitment
+          };
+          
+          const response = await fetch("/api/generate-gcp-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              configurations: [configWithCommitment],
+              commitment: commitment,
+              options: {
+                debug: enableDebug,
+                timeout: 60000,
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to generate link");
+          }
+
+          const result = await response.json();
+          if (result.success && result.shareUrl) {
+            return { commitment, url: result.shareUrl, success: true };
+          } else {
+            throw new Error(
+              result.error || "API did not return a shareable URL."
+            );
+          }
+        } catch (error) {
+          console.error(`Failed to generate ${commitment} link:`, error);
+          return {
+            commitment,
+            url: null,
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      });
+
+      // Wait for all requests to complete
+      const results = await Promise.all(promises);
+
+      // Update links based on results
+      const linkUpdates: Partial<VmConfig["links"]> = { ...config.links };
+      let successCount = 0;
+      let errorMessages: string[] = [];
+
+      results.forEach((result) => {
+        const linkType = linkTypeMap[result.commitment];
+        if (result.success && result.url) {
+          (linkUpdates as any)[linkType] = result.url;
+          successCount++;
+        } else {
+          errorMessages.push(
+            `${result.commitment}: ${result.error || "Failed"}`
+          );
+        }
+      });
+
+      // Update configuration with successful links
+      if (successCount > 0) {
+        updateConfiguration(config.id, { links: linkUpdates });
+      }
+
+      // Show summary
+      if (successCount === commitmentTypes.length) {
+        alert(`✅ Successfully generated all ${successCount} links!`);
+      } else if (successCount > 0) {
+        alert(
+          `⚠️ Generated ${successCount}/${
+            commitmentTypes.length
+          } links. Errors: ${errorMessages.join("; ")}`
+        );
+      } else {
+        alert(
+          `❌ Failed to generate any links. Errors: ${errorMessages.join("; ")}`
+        );
+      }
+    } catch (error) {
+      console.error("Error in parallel link generation:", error);
+      alert(
+        `Error generating links: ${ 
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      // Clear all loading states
+      commitmentTypes.forEach((commitment) => {
+        setLinkLoadingState(config.id, linkTypeMap[commitment], false);
+      });
     }
   };
 
@@ -195,11 +332,27 @@ export default function SpreadsheetCalculator() {
       });
     } else {
       // No matching type found, set to custom
-      updateConfiguration(configId, {
+      const updates: Partial<VmConfig> = {
         [field]: value,
         isCustom: true,
-        name: "Custom",
-      });
+        name: "custom",
+        description: `${newVcpus} vCPUs ${newMemoryGB} GB RAM`,
+      };
+
+      // Automatically manage extendedMemoryEnabled flag
+      if (seriesSupportsExtendedMemory(config.series)) {
+        const seriesConfig = MEMORY_CONFIGS[config.series];
+        const standardMemoryLimit = newVcpus * seriesConfig.maxMemoryPerVcpu;
+        if (newMemoryGB > standardMemoryLimit) {
+          updates.extendedMemoryEnabled = true;
+        } else {
+          updates.extendedMemoryEnabled = false;
+        }
+      } else {
+        updates.extendedMemoryEnabled = false;
+      }
+
+      updateConfiguration(configId, updates);
     }
   };
 
@@ -229,16 +382,172 @@ export default function SpreadsheetCalculator() {
     }
   };
 
+  // Bulk link generation for selected configurations
+  const handleGenerateBulkLinks = async (enableDebug: boolean = false) => {
+    const selectedConfigs = configurations.filter(config => selectedIds.has(config.id));
+    
+    if (selectedConfigs.length === 0) {
+      alert("Please select at least one configuration to generate bulk links.");
+      return;
+    }
+
+    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-years"];
+    const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
+      none: "onDemand",
+      "1-year": "oneYear",
+      "3-years": "threeYear",
+    };
+
+    // Set loading states for all selected configs
+    selectedConfigs.forEach(config => {
+      commitmentTypes.forEach((commitment) => {
+        setLinkLoadingState(config.id, linkTypeMap[commitment], true);
+      });
+    });
+
+    try {
+      console.log(`🚀 Starting bulk link generation for ${selectedConfigs.length} configurations...`);
+      
+      // Create all promises for parallel execution
+      const allPromises = selectedConfigs.flatMap(config => 
+        commitmentTypes.map(async (commitment) => {
+          try {
+            // Create an enhanced config with the commitment information
+            const configWithCommitment = {
+              ...config,
+              commitment: commitment
+            };
+            
+            const response = await fetch("/api/generate-gcp-url", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                configurations: [configWithCommitment],
+                commitment: commitment,
+                options: {
+                  debug: enableDebug,
+                  timeout: 60000,
+                },
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || "Failed to generate link");
+            }
+
+            const result = await response.json();
+            if (result.success && result.shareUrl) {
+              return { 
+                configId: config.id, 
+                commitment, 
+                url: result.shareUrl, 
+                success: true,
+                configName: config.name
+              };
+            } else {
+              throw new Error(result.error || "API did not return a shareable URL.");
+            }
+          } catch (error) {
+            console.error(`Failed to generate ${commitment} link for ${config.name}:`, error);
+            return {
+              configId: config.id,
+              commitment,
+              url: null,
+              success: false,
+              error: error instanceof Error ? error.message : "Unknown error",
+              configName: config.name
+            };
+          }
+        })
+      );
+
+      // Execute all promises in parallel
+      console.log(`📡 Executing ${allPromises.length} parallel requests...`);
+      const results = await Promise.all(allPromises);
+
+      // Process results and update configurations
+      const linkUpdates: Record<string, Partial<VmConfig["links"]>> = {};
+      let totalSuccessCount = 0;
+      let totalErrorCount = 0;
+      const errorsByConfig: Record<string, string[]> = {};
+
+      results.forEach((result) => {
+        const linkType = linkTypeMap[result.commitment];
+        
+        if (!linkUpdates[result.configId]) {
+          linkUpdates[result.configId] = {};
+        }
+
+        if (result.success && result.url) {
+          (linkUpdates[result.configId] as any)[linkType] = result.url;
+          totalSuccessCount++;
+        } else {
+          if (!errorsByConfig[result.configId]) {
+            errorsByConfig[result.configId] = [];
+          }
+          errorsByConfig[result.configId].push(`${result.commitment}: ${result.error || "Failed"}`);
+          totalErrorCount++;
+        }
+      });
+
+      // Update all configurations with successful links
+      Object.entries(linkUpdates).forEach(([configId, links]) => {
+        const config = configurations.find(c => c.id === configId);
+        if (config && links && Object.keys(links).length > 0) {
+          updateConfiguration(configId, { 
+            links: { ...config.links, ...links } 
+          });
+        }
+      });
+
+      // Show detailed summary
+      const totalRequests = selectedConfigs.length * commitmentTypes.length;
+      if (totalSuccessCount === totalRequests) {
+        alert(`🎉 Bulk generation complete! Successfully generated all ${totalSuccessCount} links for ${selectedConfigs.length} configurations.`);
+      } else if (totalSuccessCount > 0) {
+        const errorDetails = Object.entries(errorsByConfig).map(([configId, errors]) => {
+          const config = configurations.find(c => c.id === configId);
+          return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
+        }).join('\n');
+        
+        alert(`⚠️ Bulk generation completed with partial success!\n\n✅ Success: ${totalSuccessCount}/${totalRequests} links\n❌ Errors: ${totalErrorCount}\n\nError details:\n${errorDetails}`);
+      } else {
+        const errorDetails = Object.entries(errorsByConfig).map(([configId, errors]) => {
+          const config = configurations.find(c => c.id === configId);
+          return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
+        }).join('\n');
+        
+        alert(`❌ Bulk generation failed for all configurations.\n\nError details:\n${errorDetails}`);
+      }
+
+    } catch (error) {
+      console.error("Error in bulk link generation:", error);
+      alert(
+        `Error in bulk link generation: ${ 
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      // Clear all loading states
+      selectedConfigs.forEach(config => {
+        commitmentTypes.forEach((commitment) => {
+          setLinkLoadingState(config.id, linkTypeMap[commitment], false);
+        });
+      });
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-      minimumFractionDigits: 4,
+      minimumFractionDigits: 2,
     }).format(amount);
   };
 
-  const getMemoryValidationInfo = (config: any) => {
-    if (!config.isCustom || !seriesSupportsExtendedMemory(config.series)) {
+  const getMemoryValidationInfo = (config: VmConfig) => {
+    if (!config.isCustom) {
       return null;
     }
 
@@ -271,6 +580,16 @@ export default function SpreadsheetCalculator() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Bulk Generation Button */}
+          <Button
+            variant="default"
+            onClick={() => handleGenerateBulkLinks()}
+            disabled={selectedIds.size === 0}
+            className="flex items-center gap-2"
+          >
+            Generate Bulk Links
+          </Button>
+          
           <input
             ref={fileInputRef}
             type="file"
@@ -319,7 +638,7 @@ export default function SpreadsheetCalculator() {
                   />
                 </th>
                 <th className="w-24 p-3 text-left font-semibold">Actions</th>
-                <th className="min-w-[140px] p-3 text-left font-semibold">
+                <th className="min-w-[200px] p-3 text-left font-semibold">
                   Region Location
                 </th>
                 <th className="min-w-[100px] p-3 text-left font-semibold">
@@ -414,6 +733,8 @@ export default function SpreadsheetCalculator() {
                     threeYear: false,
                   };
 
+                  const supportsCustom = seriesSupportsCustom(config.series);
+
                   return (
                     <motion.tr
                       key={config.id}
@@ -421,7 +742,7 @@ export default function SpreadsheetCalculator() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className={`border-t hover:bg-muted/25 transition-colors ${
+                      className={`border-t hover:bg-muted/25 transition-colors ${ 
                         selectedIds.has(config.id) ? "bg-muted/50" : ""
                       }`}
                       onMouseEnter={() => setHoveredRow(config.id)}
@@ -443,14 +764,30 @@ export default function SpreadsheetCalculator() {
                             size="icon"
                             className="h-8 w-8"
                             onClick={() => duplicateConfiguration(config.id)}
+                            title="Duplicate configuration"
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700"
+                            onClick={() => handleGenerateAllLinks(config)}
+                            title="Generate all links in parallel"
+                            disabled={
+                              currentLoading.onDemand ||
+                              currentLoading.oneYear ||
+                              currentLoading.threeYear
+                            }
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
                             onClick={() => removeConfiguration(config.id)}
+                            title="Delete configuration"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -491,6 +828,8 @@ export default function SpreadsheetCalculator() {
                               value,
                               config.regionLocation
                             );
+                            const newSeriesSupportsCustom = seriesSupportsCustom(value);
+                            
                             if (availableTypes.length > 0) {
                               const firstType = availableTypes[0];
                               updateConfiguration(config.id, {
@@ -505,10 +844,14 @@ export default function SpreadsheetCalculator() {
                                 cudThreeYearPerHour:
                                   firstType.cudThreeYearPerHour,
                                 spotPerHour: firstType.spotPerHour,
+                                // If the new series doesn't support custom, force isCustom to false
+                                isCustom: newSeriesSupportsCustom ? config.isCustom : false,
                               });
                             } else {
                               updateConfiguration(config.id, {
                                 series: value,
+                                // Also handle this edge case
+                                isCustom: newSeriesSupportsCustom ? config.isCustom : false,
                               });
                             }
                           }}
@@ -530,12 +873,13 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3 text-center">
                         <Checkbox
                           checked={config.isCustom}
+                          disabled={!supportsCustom}
                           onCheckedChange={(checked) => {
                             const isChecked = checked === true;
                             if (isChecked) {
                               updateConfiguration(config.id, {
                                 isCustom: true,
-                                name: "Custom",
+                                name: "custom",
                               });
                             } else {
                               const matchingType = findMatchingMachineType(
@@ -592,10 +936,10 @@ export default function SpreadsheetCalculator() {
                           value={config.name}
                           disabled={config.isCustom}
                           onValueChange={(value) => {
-                            if (value === "Custom") {
+                            if (value === "custom") {
                               updateConfiguration(config.id, {
                                 isCustom: true,
-                                name: "Custom",
+                                name: "custom",
                               });
                             } else {
                               const selectedType = availableTypes.find(
@@ -624,7 +968,7 @@ export default function SpreadsheetCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Custom">Custom</SelectItem>
+                            <SelectItem value="custom" disabled={!supportsCustom}>Custom</SelectItem>
                             {availableTypes.map((type) => (
                               <SelectItem key={type.name} value={type.name}>
                                 {type.name}
@@ -653,14 +997,17 @@ export default function SpreadsheetCalculator() {
                               e.key === "Enter" && handleCellBlur()
                             }
                             className="h-8 text-sm"
-                            min="1"
+                            min="2"
                             max="96"
+                            step="2"
+                            disabled={!supportsCustom}
                             autoFocus
                           />
                         ) : (
                           <button
                             onClick={() => handleCellClick(config.id, "vCpus")}
-                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                            disabled={!supportsCustom}
+                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {config.vCpus}
                           </button>
@@ -686,7 +1033,7 @@ export default function SpreadsheetCalculator() {
                               onKeyDown={(e) =>
                                 e.key === "Enter" && handleCellBlur()
                               }
-                              className={`h-8 text-sm ${
+                              className={`h-8 text-sm ${ 
                                 memoryInfo && !memoryInfo.isValid
                                   ? "border-red-500"
                                   : ""
@@ -694,6 +1041,7 @@ export default function SpreadsheetCalculator() {
                               min={memoryInfo?.min || 1}
                               max={memoryInfo?.max || 384}
                               step="0.25"
+                              disabled={!supportsCustom}
                               autoFocus
                             />
                             {memoryInfo && (
@@ -707,7 +1055,8 @@ export default function SpreadsheetCalculator() {
                             onClick={() =>
                               handleCellClick(config.id, "memoryGB")
                             }
-                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full"
+                            disabled={!supportsCustom}
+                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <div className="flex items-center gap-1">
                               {config.memoryGB}
@@ -863,9 +1212,6 @@ export default function SpreadsheetCalculator() {
                               SQL Server Standard
                             </SelectItem>
                             <SelectItem value="web">SQL Server Web</SelectItem>
-                            <SelectItem value="express">
-                              SQL Server Express
-                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </td>
@@ -978,7 +1324,7 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <LinkCell
                           config={config}
-                          commitment="1 year"
+                          commitment="1-year"
                           loading={currentLoading.oneYear}
                           onGenerate={handleGenerateLink}
                         />
@@ -987,7 +1333,7 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <LinkCell
                           config={config}
-                          commitment="3 years"
+                          commitment="3-years"
                           loading={currentLoading.threeYear}
                           onGenerate={handleGenerateLink}
                         />
@@ -1035,12 +1381,11 @@ function LinkCell({
   onGenerate: (config: VmConfig, commitment: CommitmentType) => void;
 }) {
   const linkTypeMap = {
-    none: "onDemand",
-    "1 year": "oneYear",
-    "3 years": "threeYear",
-  } as const;
-  const link =
-    config.links?.[linkTypeMap[commitment] as keyof typeof config.links];
+    none: "onDemand" as const,
+    "1-year": "oneYear" as const,
+    "3-years": "threeYear" as const,
+  };
+  const link = config.links?.[linkTypeMap[commitment]];
 
   if (link) {
     return (
