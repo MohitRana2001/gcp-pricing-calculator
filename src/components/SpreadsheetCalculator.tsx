@@ -125,6 +125,7 @@ export default function SpreadsheetCalculator() {
       none: "onDemand",
       "1-year": "oneYear",
       "3-years": "threeYear",
+
     };
     const linkType = linkTypeMap[commitment];
 
@@ -135,7 +136,7 @@ export default function SpreadsheetCalculator() {
         ...config,
         commitment: commitment
       };
-      
+
       const response = await fetch("/api/generate-gcp-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -169,6 +170,7 @@ export default function SpreadsheetCalculator() {
       console.error(`Failed to generate ${commitment} link:`, error);
       alert(
         `Error generating link: ${ 
+
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
@@ -730,6 +732,7 @@ export default function SpreadsheetCalculator() {
                     oneYear: false,
                     threeYear: false,
                   };
+
                   const supportsCustom = seriesSupportsCustom(config.series);
 
                   return (
