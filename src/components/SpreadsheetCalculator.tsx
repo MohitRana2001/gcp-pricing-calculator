@@ -18,6 +18,9 @@ import {
   VmConfig,
   seriesSupportsCustom,
   seriesSupportsExtendedMemory,
+  seriesHasPredefinedVcpus,
+  getValidVcpuValues,
+  getNextValidVcpu,
   getAllowedMemoryRange,
   getAvailableMachineTypes,
   getPricing,
@@ -130,10 +133,9 @@ export default function SpreadsheetCalculator() {
 
     setLinkLoadingState(config.id, linkType, true);
     try {
-
       const configWithCommitment = {
         ...config,
-        commitment: commitment
+        commitment: commitment,
       };
 
       const response = await fetch("/api/generate-gcp-url", {
@@ -161,14 +163,17 @@ export default function SpreadsheetCalculator() {
           [linkType]: result.shareUrl,
         };
         updateConfiguration(config.id, { links: linkUpdate });
-        console.log(`Successfully generated ${commitment} link for ${config.name}`);
+        console.log(
+          `Successfully generated ${commitment} link for ${config.name}`
+        );
       } else {
         throw new Error(result.error || "API did not return a shareable URL.");
       }
     } catch (error) {
       console.error(`Failed to generate ${commitment} link:`, error);
       alert(
-        `Error generating link: ${error instanceof Error ? error.message : "Unknown error"
+        `Error generating link: ${
+          error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -202,7 +207,7 @@ export default function SpreadsheetCalculator() {
           // Create an enhanced config with the commitment information
           const configWithCommitment = {
             ...config,
-            commitment: commitment
+            commitment: commitment,
           };
 
           const response = await fetch("/api/generate-gcp-url", {
@@ -272,7 +277,8 @@ export default function SpreadsheetCalculator() {
         alert(`✅ Successfully generated all ${successCount} links!`);
       } else if (successCount > 0) {
         alert(
-          `⚠️ Generated ${successCount}/${commitmentTypes.length
+          `⚠️ Generated ${successCount}/${
+            commitmentTypes.length
           } links. Errors: ${errorMessages.join("; ")}`
         );
       } else {
@@ -283,7 +289,8 @@ export default function SpreadsheetCalculator() {
     } catch (error) {
       console.error("Error in parallel link generation:", error);
       alert(
-        `Error generating links: ${error instanceof Error ? error.message : "Unknown error"
+        `Error generating links: ${
+          error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -326,19 +333,41 @@ export default function SpreadsheetCalculator() {
         spotPerHour: matchingType.spotPerHour,
       });
     } else {
-      // No matching type found, set to custom
+      // No matching type found, set to custom and auto-adjust if needed
+      let adjustedVcpus = newVcpus;
+      let adjustedMemoryGB = newMemoryGB;
+
+      const memoryRange = getAllowedMemoryRange(config.series, adjustedVcpus);
+
+      if (field === "vCpus") {
+        if (adjustedMemoryGB < memoryRange.min) {
+          adjustedMemoryGB = memoryRange.min;
+        } else if (adjustedMemoryGB > memoryRange.max) {
+          adjustedMemoryGB = memoryRange.max;
+        }
+        adjustedMemoryGB = Math.round(adjustedMemoryGB / 0.25) * 0.25;
+      } else if (field === "memoryGB") {
+        if (adjustedMemoryGB < memoryRange.min) {
+          adjustedMemoryGB = memoryRange.min;
+        } else if (adjustedMemoryGB > memoryRange.max) {
+          adjustedMemoryGB = memoryRange.max;
+        }
+        adjustedMemoryGB = Math.round(adjustedMemoryGB / 0.25) * 0.25;
+      }
+
       const updates: Partial<VmConfig> = {
-        [field]: value,
+        vCpus: adjustedVcpus,
+        memoryGB: adjustedMemoryGB,
         isCustom: true,
         name: "custom",
-        description: `${newVcpus} vCPUs ${newMemoryGB} GB RAM`,
+        description: `${adjustedVcpus} vCPUs ${adjustedMemoryGB} GB RAM`,
       };
 
-      // Automatically manage extendedMemoryEnabled flag
       if (seriesSupportsExtendedMemory(config.series)) {
         const seriesConfig = MEMORY_CONFIGS[config.series];
-        const standardMemoryLimit = newVcpus * seriesConfig.maxMemoryPerVcpu;
-        if (newMemoryGB > standardMemoryLimit) {
+        const standardMemoryLimit =
+          adjustedVcpus * seriesConfig.maxMemoryPerVcpu;
+        if (adjustedMemoryGB > standardMemoryLimit) {
           updates.extendedMemoryEnabled = true;
         } else {
           updates.extendedMemoryEnabled = false;
@@ -379,7 +408,9 @@ export default function SpreadsheetCalculator() {
 
   // Bulk link generation for selected configurations
   const handleGenerateBulkLinks = async (enableDebug: boolean = false) => {
-    const selectedConfigs = configurations.filter(config => selectedIds.has(config.id));
+    const selectedConfigs = configurations.filter((config) =>
+      selectedIds.has(config.id)
+    );
 
     if (selectedConfigs.length === 0) {
       alert("Please select at least one configuration to generate bulk links.");
@@ -394,23 +425,25 @@ export default function SpreadsheetCalculator() {
     };
 
     // Set loading states for all selected configs
-    selectedConfigs.forEach(config => {
+    selectedConfigs.forEach((config) => {
       commitmentTypes.forEach((commitment) => {
         setLinkLoadingState(config.id, linkTypeMap[commitment], true);
       });
     });
 
     try {
-      console.log(`🚀 Starting bulk link generation for ${selectedConfigs.length} configurations...`);
+      console.log(
+        `🚀 Starting bulk link generation for ${selectedConfigs.length} configurations...`
+      );
 
       // Create all promises for parallel execution
-      const allPromises = selectedConfigs.flatMap(config =>
+      const allPromises = selectedConfigs.flatMap((config) =>
         commitmentTypes.map(async (commitment) => {
           try {
             // Create an enhanced config with the commitment information
             const configWithCommitment = {
               ...config,
-              commitment: commitment
+              commitment: commitment,
             };
 
             const response = await fetch("/api/generate-gcp-url", {
@@ -438,20 +471,25 @@ export default function SpreadsheetCalculator() {
                 commitment,
                 url: result.shareUrl,
                 success: true,
-                configName: config.name
+                configName: config.name,
               };
             } else {
-              throw new Error(result.error || "API did not return a shareable URL.");
+              throw new Error(
+                result.error || "API did not return a shareable URL."
+              );
             }
           } catch (error) {
-            console.error(`Failed to generate ${commitment} link for ${config.name}:`, error);
+            console.error(
+              `Failed to generate ${commitment} link for ${config.name}:`,
+              error
+            );
             return {
               configId: config.id,
               commitment,
               url: null,
               success: false,
               error: error instanceof Error ? error.message : "Unknown error",
-              configName: config.name
+              configName: config.name,
             };
           }
         })
@@ -481,17 +519,19 @@ export default function SpreadsheetCalculator() {
           if (!errorsByConfig[result.configId]) {
             errorsByConfig[result.configId] = [];
           }
-          errorsByConfig[result.configId].push(`${result.commitment}: ${result.error || "Failed"}`);
+          errorsByConfig[result.configId].push(
+            `${result.commitment}: ${result.error || "Failed"}`
+          );
           totalErrorCount++;
         }
       });
 
       // Update all configurations with successful links
       Object.entries(linkUpdates).forEach(([configId, links]) => {
-        const config = configurations.find(c => c.id === configId);
+        const config = configurations.find((c) => c.id === configId);
         if (config && links && Object.keys(links).length > 0) {
           updateConfiguration(configId, {
-            links: { ...config.links, ...links }
+            links: { ...config.links, ...links },
           });
         }
       });
@@ -499,32 +539,42 @@ export default function SpreadsheetCalculator() {
       // Show detailed summary
       const totalRequests = selectedConfigs.length * commitmentTypes.length;
       if (totalSuccessCount === totalRequests) {
-        alert(`🎉 Bulk generation complete! Successfully generated all ${totalSuccessCount} links for ${selectedConfigs.length} configurations.`);
+        alert(
+          `🎉 Bulk generation complete! Successfully generated all ${totalSuccessCount} links for ${selectedConfigs.length} configurations.`
+        );
       } else if (totalSuccessCount > 0) {
-        const errorDetails = Object.entries(errorsByConfig).map(([configId, errors]) => {
-          const config = configurations.find(c => c.id === configId);
-          return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
-        }).join('\n');
+        const errorDetails = Object.entries(errorsByConfig)
+          .map(([configId, errors]) => {
+            const config = configurations.find((c) => c.id === configId);
+            return `${config?.name || "Unknown"}: ${errors.join(", ")}`;
+          })
+          .join("\n");
 
-        alert(`⚠️ Bulk generation completed with partial success!\n\n✅ Success: ${totalSuccessCount}/${totalRequests} links\n❌ Errors: ${totalErrorCount}\n\nError details:\n${errorDetails}`);
+        alert(
+          `⚠️ Bulk generation completed with partial success!\n\n✅ Success: ${totalSuccessCount}/${totalRequests} links\n❌ Errors: ${totalErrorCount}\n\nError details:\n${errorDetails}`
+        );
       } else {
-        const errorDetails = Object.entries(errorsByConfig).map(([configId, errors]) => {
-          const config = configurations.find(c => c.id === configId);
-          return `${config?.name || 'Unknown'}: ${errors.join(', ')}`;
-        }).join('\n');
+        const errorDetails = Object.entries(errorsByConfig)
+          .map(([configId, errors]) => {
+            const config = configurations.find((c) => c.id === configId);
+            return `${config?.name || "Unknown"}: ${errors.join(", ")}`;
+          })
+          .join("\n");
 
-        alert(`❌ Bulk generation failed for all configurations.\n\nError details:\n${errorDetails}`);
+        alert(
+          `❌ Bulk generation failed for all configurations.\n\nError details:\n${errorDetails}`
+        );
       }
-
     } catch (error) {
       console.error("Error in bulk link generation:", error);
       alert(
-        `Error in bulk link generation: ${error instanceof Error ? error.message : "Unknown error"
+        `Error in bulk link generation: ${
+          error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
       // Clear all loading states
-      selectedConfigs.forEach(config => {
+      selectedConfigs.forEach((config) => {
         commitmentTypes.forEach((commitment) => {
           setLinkLoadingState(config.id, linkTypeMap[commitment], false);
         });
@@ -735,8 +785,9 @@ export default function SpreadsheetCalculator() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className={`border-t hover:bg-muted/25 transition-colors ${selectedIds.has(config.id) ? "bg-muted/50" : ""
-                        }`}
+                      className={`border-t hover:bg-muted/25 transition-colors ${
+                        selectedIds.has(config.id) ? "bg-muted/50" : ""
+                      }`}
                       onMouseEnter={() => setHoveredRow(config.id)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
@@ -820,7 +871,8 @@ export default function SpreadsheetCalculator() {
                               value,
                               config.regionLocation
                             );
-                            const newSeriesSupportsCustom = seriesSupportsCustom(value);
+                            const newSeriesSupportsCustom =
+                              seriesSupportsCustom(value);
 
                             if (availableTypes.length > 0) {
                               const firstType = availableTypes[0];
@@ -837,13 +889,17 @@ export default function SpreadsheetCalculator() {
                                   firstType.cudThreeYearPerHour,
                                 spotPerHour: firstType.spotPerHour,
                                 // If the new series doesn't support custom, force isCustom to false
-                                isCustom: newSeriesSupportsCustom ? config.isCustom : false,
+                                isCustom: newSeriesSupportsCustom
+                                  ? config.isCustom
+                                  : false,
                               });
                             } else {
                               updateConfiguration(config.id, {
                                 series: value,
                                 // Also handle this edge case
-                                isCustom: newSeriesSupportsCustom ? config.isCustom : false,
+                                isCustom: newSeriesSupportsCustom
+                                  ? config.isCustom
+                                  : false,
                               });
                             }
                           }}
@@ -960,7 +1016,12 @@ export default function SpreadsheetCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="custom" disabled={!supportsCustom}>Custom</SelectItem>
+                            <SelectItem
+                              value="custom"
+                              disabled={!supportsCustom}
+                            >
+                              Custom
+                            </SelectItem>
                             {availableTypes.map((type) => (
                               <SelectItem key={type.name} value={type.name}>
                                 {type.name}
@@ -974,53 +1035,106 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         {(() => {
                           const seriesConfig = MEMORY_CONFIGS[config.series];
-                          const maxVcpus = seriesConfig ? seriesConfig.maxVcpus : 96;
+                          const maxVcpus = seriesConfig
+                            ? seriesConfig.maxVcpus
+                            : 96;
                           const minVcpus = 2;
+                          const validVcpus = getValidVcpuValues(config.series);
+                          const hasPredefinedVcpus = seriesHasPredefinedVcpus(
+                            config.series
+                          );
 
-                          return editingCell?.configId === config.id && editingCell?.field === "vCpus" ? (
+                          return editingCell?.configId === config.id &&
+                            editingCell?.field === "vCpus" ? (
                             <Input
-                              type="number"
+                              type="text"
                               value={config.vCpus}
                               onChange={(e) => {
-                                const rawValue = parseInt(e.target.value, 10);
+                                // Allow empty string during typing
                                 if (e.target.value === "") {
                                   handleVcpuMemoryChange(config.id, "vCpus", 0);
                                   return;
                                 }
+
+                                // Only allow numeric input
+                                const numericValue = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  ""
+                                );
+                                if (numericValue !== e.target.value) {
+                                  return; // Prevent non-numeric characters
+                                }
+
+                                const rawValue = parseInt(numericValue, 10);
                                 if (isNaN(rawValue)) return;
 
-                                const cappedValue = Math.min(rawValue, maxVcpus);
-                                handleVcpuMemoryChange(config.id, "vCpus", cappedValue);
+                                // For real-time validation, just cap at maximum to allow typing multi-digit numbers
+                                const cappedValue = Math.min(
+                                  rawValue,
+                                  maxVcpus
+                                );
+                                handleVcpuMemoryChange(
+                                  config.id,
+                                  "vCpus",
+                                  cappedValue
+                                );
                               }}
                               onBlur={() => {
                                 let finalValue = config.vCpus;
 
-                                if (finalValue < minVcpus) {
-                                  finalValue = minVcpus;
-                                }
+                                if (hasPredefinedVcpus) {
+                                  // For series with predefined vCPUs (like N2D), find the closest valid value
+                                  if (!validVcpus.includes(finalValue)) {
+                                    finalValue = getNextValidVcpu(
+                                      config.series,
+                                      finalValue
+                                    );
+                                  }
+                                } else {
+                                  // For other series, apply standard validation
+                                  if (finalValue < minVcpus) {
+                                    finalValue = minVcpus;
+                                  }
 
-                                if (finalValue % 2 !== 0) {
-                                  finalValue = Math.max(minVcpus, finalValue - 1);
+                                  if (finalValue % 2 !== 0) {
+                                    finalValue = Math.max(
+                                      minVcpus,
+                                      finalValue - 1
+                                    );
+                                  }
                                 }
 
                                 if (finalValue !== config.vCpus) {
-                                  handleVcpuMemoryChange(config.id, "vCpus", finalValue);
+                                  handleVcpuMemoryChange(
+                                    config.id,
+                                    "vCpus",
+                                    finalValue
+                                  );
                                 }
                                 handleCellBlur();
                               }}
+                              onFocus={(e) => {
+                                // Select all text when focused for easy replacement
+                                e.target.select();
+                              }}
                               onKeyDown={(e) => {
-                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                if (e.key === "Enter")
+                                  (e.target as HTMLInputElement).blur();
                               }}
                               className="h-8 text-sm"
-                              min={minVcpus}
-                              max={maxVcpus}
-                              step="2"
                               disabled={!supportsCustom}
                               autoFocus
+                              placeholder={
+                                hasPredefinedVcpus
+                                  ? `Valid: ${validVcpus.join(", ")}`
+                                  : `${minVcpus}-${maxVcpus} (even numbers)`
+                              }
                             />
                           ) : (
                             <button
-                              onClick={() => handleCellClick(config.id, "vCpus")}
+                              onClick={() =>
+                                handleCellClick(config.id, "vCpus")
+                              }
                               disabled={!supportsCustom}
                               className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -1032,22 +1146,51 @@ export default function SpreadsheetCalculator() {
 
                       {/* Memory (GB) */}
                       <td className="p-3">
-                        {editingCell?.configId === config.id && editingCell?.field === "memoryGB" ? (
+                        {editingCell?.configId === config.id &&
+                        editingCell?.field === "memoryGB" ? (
                           <div>
                             <Input
-                              type="number"
+                              type="text"
                               value={config.memoryGB}
                               onChange={(e) => {
-                                const rawValue = parseFloat(e.target.value);
-                                const maxMemory = memoryInfo?.max || 384;
-
+                                // Allow empty string during typing
                                 if (e.target.value === "") {
-                                  handleVcpuMemoryChange(config.id, "memoryGB", 0);
+                                  handleVcpuMemoryChange(
+                                    config.id,
+                                    "memoryGB",
+                                    0
+                                  );
                                   return;
                                 }
+
+                                // Only allow numeric input with optional decimal point
+                                const numericValue = e.target.value.replace(
+                                  /[^0-9.]/g,
+                                  ""
+                                );
+                                // Ensure only one decimal point
+                                const parts = numericValue.split(".");
+                                if (parts.length > 2) {
+                                  return; // More than one decimal point
+                                }
+
+                                if (numericValue !== e.target.value) {
+                                  return; // Prevent non-numeric characters
+                                }
+
+                                const rawValue = parseFloat(numericValue);
+                                const maxMemory = memoryInfo?.max || 384;
+
                                 if (isNaN(rawValue)) return;
-                                const cappedValue = Math.min(rawValue, maxMemory);
-                                handleVcpuMemoryChange(config.id, "memoryGB", cappedValue);
+                                const cappedValue = Math.min(
+                                  rawValue,
+                                  maxMemory
+                                );
+                                handleVcpuMemoryChange(
+                                  config.id,
+                                  "memoryGB",
+                                  cappedValue
+                                );
                               }}
                               onBlur={() => {
                                 if (!memoryInfo) {
@@ -1061,24 +1204,37 @@ export default function SpreadsheetCalculator() {
                                   finalValue = min;
                                 }
 
-                                finalValue = Math.round(finalValue / 0.25) * 0.25;
+                                finalValue =
+                                  Math.round(finalValue / 0.25) * 0.25;
                                 finalValue = Math.max(min, finalValue);
 
                                 if (finalValue !== config.memoryGB) {
-                                  handleVcpuMemoryChange(config.id, "memoryGB", finalValue);
+                                  handleVcpuMemoryChange(
+                                    config.id,
+                                    "memoryGB",
+                                    finalValue
+                                  );
                                 }
                                 handleCellBlur();
                               }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              onFocus={(e) => {
+                                // Select all text when focused for easy replacement
+                                e.target.select();
                               }}
-                              className={`h-8 text-sm ${memoryInfo && !memoryInfo.isValid ? "border-red-500" : ""
-                                }`}
-                              min={memoryInfo?.min || 1}
-                              max={memoryInfo?.max || 384}
-                              step="0.25"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  (e.target as HTMLInputElement).blur();
+                              }}
+                              className={`h-8 text-sm ${
+                                memoryInfo && !memoryInfo.isValid
+                                  ? "border-red-500"
+                                  : ""
+                              }`}
                               disabled={!supportsCustom}
                               autoFocus
+                              placeholder={`${memoryInfo?.min || 1}-${
+                                memoryInfo?.max || 384
+                              } GB (0.25 increments)`}
                             />
                             {memoryInfo && (
                               <div className="text-xs text-muted-foreground mt-1">
@@ -1088,7 +1244,9 @@ export default function SpreadsheetCalculator() {
                           </div>
                         ) : (
                           <button
-                            onClick={() => handleCellClick(config.id, "memoryGB")}
+                            onClick={() =>
+                              handleCellClick(config.id, "memoryGB")
+                            }
                             disabled={!supportsCustom}
                             className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -1098,11 +1256,13 @@ export default function SpreadsheetCalculator() {
                                 <span className="text-red-500 text-xs">⚠️</span>
                               )}
                             </div>
-                            {seriesSupportsExtendedMemory(config.series) && config.isCustom && (
-                              <div className="text-xs text-muted-foreground">
-                                {memoryInfo && `${memoryInfo.min}-${memoryInfo.max}`}
-                              </div>
-                            )}
+                            {seriesSupportsExtendedMemory(config.series) &&
+                              config.isCustom && (
+                                <div className="text-xs text-muted-foreground">
+                                  {memoryInfo &&
+                                    `${memoryInfo.min}-${memoryInfo.max}`}
+                                </div>
+                              )}
                           </button>
                         )}
                       </td>
@@ -1124,25 +1284,51 @@ export default function SpreadsheetCalculator() {
                       {/* Running Hours */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                          editingCell?.field === "runningHours" ? (
+                        editingCell?.field === "runningHours" ? (
                           <Input
-                            type="number"
+                            type="text"
                             value={config.runningHours}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              // Allow empty string during typing
+                              if (e.target.value === "") {
+                                handleInputChange(config.id, "runningHours", 1);
+                                return;
+                              }
+
+                              // Only allow numeric input
+                              const numericValue = e.target.value.replace(
+                                /[^0-9]/g,
+                                ""
+                              );
+                              if (numericValue !== e.target.value) {
+                                return; // Prevent non-numeric characters
+                              }
+
+                              const value = parseInt(numericValue) || 1;
+                              const cappedValue = Math.min(value, 744);
                               handleInputChange(
                                 config.id,
                                 "runningHours",
-                                parseInt(e.target.value) || 1
-                              )
-                            }
-                            onBlur={handleCellBlur}
+                                cappedValue
+                              );
+                            }}
+                            onBlur={() => {
+                              // Ensure minimum value on blur
+                              if (config.runningHours < 1) {
+                                handleInputChange(config.id, "runningHours", 1);
+                              }
+                              handleCellBlur();
+                            }}
+                            onFocus={(e) => {
+                              // Select all text when focused for easy replacement
+                              e.target.select();
+                            }}
                             onKeyDown={(e) =>
                               e.key === "Enter" && handleCellBlur()
                             }
                             className="h-8 text-sm"
-                            min="1"
-                            max="744"
                             autoFocus
+                            placeholder="1-744 hours"
                           />
                         ) : (
                           <button
@@ -1159,25 +1345,51 @@ export default function SpreadsheetCalculator() {
                       {/* Quantity */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                          editingCell?.field === "quantity" ? (
+                        editingCell?.field === "quantity" ? (
                           <Input
-                            type="number"
+                            type="text"
                             value={config.quantity}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              // Allow empty string during typing
+                              if (e.target.value === "") {
+                                handleInputChange(config.id, "quantity", 1);
+                                return;
+                              }
+
+                              // Only allow numeric input
+                              const numericValue = e.target.value.replace(
+                                /[^0-9]/g,
+                                ""
+                              );
+                              if (numericValue !== e.target.value) {
+                                return; // Prevent non-numeric characters
+                              }
+
+                              const value = parseInt(numericValue) || 1;
+                              const cappedValue = Math.min(value, 1000);
                               handleInputChange(
                                 config.id,
                                 "quantity",
-                                parseInt(e.target.value) || 1
-                              )
-                            }
-                            onBlur={handleCellBlur}
+                                cappedValue
+                              );
+                            }}
+                            onBlur={() => {
+                              // Ensure minimum value on blur
+                              if (config.quantity < 1) {
+                                handleInputChange(config.id, "quantity", 1);
+                              }
+                              handleCellBlur();
+                            }}
+                            onFocus={(e) => {
+                              // Select all text when focused for easy replacement
+                              e.target.select();
+                            }}
                             onKeyDown={(e) =>
                               e.key === "Enter" && handleCellBlur()
                             }
                             className="h-8 text-sm"
-                            min="1"
-                            max="1000"
                             autoFocus
+                            placeholder="1-1000"
                           />
                         ) : (
                           <button

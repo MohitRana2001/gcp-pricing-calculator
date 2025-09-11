@@ -171,10 +171,46 @@ export const MEMORY_CONFIGS: Record<string, MachineConfig> = {
   't2d': { minMemoryPerVcpu: 1, maxMemoryPerVcpu: 4, maxVcpus: 60, maxMemoryGB: 240, supportsExtendedMemory: false }
 }
 
+// Valid vCPU values for N2D series based on predefined machine types
+export const N2D_VALID_VCPUS = [2, 4, 8, 16, 32, 48, 64, 80, 96, 128, 224];
+
 const CUSTOM_MACHINE_SERIES = ['e2', 'n1', 'n2', 'n2d'];
 
 export function seriesSupportsCustom(series: string): boolean {
   return CUSTOM_MACHINE_SERIES.includes(series);
+}
+
+// Check if a series has predefined vCPU values (like N2D)
+export function seriesHasPredefinedVcpus(series: string): boolean {
+  return series === 'n2d';
+}
+
+// Get valid vCPU values for a series
+export function getValidVcpuValues(series: string): number[] {
+  if (series === 'n2d') {
+    return N2D_VALID_VCPUS;
+  }
+  // For other series, return a range of even numbers
+  const config = MEMORY_CONFIGS[series];
+  if (!config) return [];
+  
+  const vcpus = [];
+  for (let i = 2; i <= config.maxVcpus; i += 2) {
+    vcpus.push(i);
+  }
+  return vcpus;
+}
+
+// Get the next valid vCPU value for a series
+export function getNextValidVcpu(series: string, currentVcpu: number): number {
+  const validVcpus = getValidVcpuValues(series);
+  
+  // Find the closest valid vCPU that is >= currentVcpu
+  const nextValid = validVcpus.find(vcpu => vcpu >= currentVcpu);
+  if (nextValid) return nextValid;
+  
+  // If no valid vCPU found, return the maximum
+  return validVcpus[validVcpus.length - 1] || currentVcpu;
 }
 
 export function seriesSupportsExtendedMemory(series: string): boolean {
