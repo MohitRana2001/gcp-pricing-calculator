@@ -972,65 +972,107 @@ export default function SpreadsheetCalculator() {
 
                       {/* vCPUs */}
                       <td className="p-3">
-                        {editingCell?.configId === config.id &&
-                          editingCell?.field === "vCpus" ? (
-                          <Input
-                            type="number"
-                            value={config.vCpus}
-                            onChange={(e) => {
-                              const value = parseInt(e.target.value, 10);
-                              if (e.target.value === "") {
-                                handleVcpuMemoryChange(config.id, "vCpus", 2);
-                                return;
-                              }
-                              if (!isNaN(value) && value % 2 === 0) {
-                                handleVcpuMemoryChange(config.id, "vCpus", value);
-                              }
-                            }}
-                            onBlur={handleCellBlur}
-                            onKeyDown={(e) =>
-                              e.key === "Enter" && handleCellBlur()
-                            }
-                            className="h-8 text-sm"
-                            min="2"
-                            max="96"
-                            step="2"
-                            disabled={!supportsCustom}
-                            autoFocus
-                          />
-                        ) : (
-                          <button
-                            onClick={() => handleCellClick(config.id, "vCpus")}
-                            disabled={!supportsCustom}
-                            className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {config.vCpus}
-                          </button>
-                        )}
+                        {(() => {
+                          const seriesConfig = MEMORY_CONFIGS[config.series];
+                          const maxVcpus = seriesConfig ? seriesConfig.maxVcpus : 96;
+                          const minVcpus = 2;
+
+                          return editingCell?.configId === config.id && editingCell?.field === "vCpus" ? (
+                            <Input
+                              type="number"
+                              value={config.vCpus}
+                              onChange={(e) => {
+                                const rawValue = parseInt(e.target.value, 10);
+                                if (e.target.value === "") {
+                                  handleVcpuMemoryChange(config.id, "vCpus", 0);
+                                  return;
+                                }
+                                if (isNaN(rawValue)) return;
+
+                                const cappedValue = Math.min(rawValue, maxVcpus);
+                                handleVcpuMemoryChange(config.id, "vCpus", cappedValue);
+                              }}
+                              onBlur={() => {
+                                let finalValue = config.vCpus;
+
+                                if (finalValue < minVcpus) {
+                                  finalValue = minVcpus;
+                                }
+
+                                if (finalValue % 2 !== 0) {
+                                  finalValue = Math.max(minVcpus, finalValue - 1);
+                                }
+
+                                if (finalValue !== config.vCpus) {
+                                  handleVcpuMemoryChange(config.id, "vCpus", finalValue);
+                                }
+                                handleCellBlur();
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                              className="h-8 text-sm"
+                              min={minVcpus}
+                              max={maxVcpus}
+                              step="2"
+                              disabled={!supportsCustom}
+                              autoFocus
+                            />
+                          ) : (
+                            <button
+                              onClick={() => handleCellClick(config.id, "vCpus")}
+                              disabled={!supportsCustom}
+                              className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {config.vCpus}
+                            </button>
+                          );
+                        })()}
                       </td>
 
                       {/* Memory (GB) */}
                       <td className="p-3">
-                        {editingCell?.configId === config.id &&
-                          editingCell?.field === "memoryGB" ? (
+                        {editingCell?.configId === config.id && editingCell?.field === "memoryGB" ? (
                           <div>
                             <Input
                               type="number"
                               value={config.memoryGB}
-                              onChange={(e) =>
-                                handleVcpuMemoryChange(
-                                  config.id,
-                                  "memoryGB",
-                                  parseFloat(e.target.value) || 1
-                                )
-                              }
-                              onBlur={handleCellBlur}
-                              onKeyDown={(e) =>
-                                e.key === "Enter" && handleCellBlur()
-                              }
-                              className={`h-8 text-sm ${memoryInfo && !memoryInfo.isValid
-                                  ? "border-red-500"
-                                  : ""
+                              onChange={(e) => {
+                                const rawValue = parseFloat(e.target.value);
+                                const maxMemory = memoryInfo?.max || 384;
+
+                                if (e.target.value === "") {
+                                  handleVcpuMemoryChange(config.id, "memoryGB", 0);
+                                  return;
+                                }
+                                if (isNaN(rawValue)) return;
+                                const cappedValue = Math.min(rawValue, maxMemory);
+                                handleVcpuMemoryChange(config.id, "memoryGB", cappedValue);
+                              }}
+                              onBlur={() => {
+                                if (!memoryInfo) {
+                                  handleCellBlur();
+                                  return;
+                                }
+                                let finalValue = config.memoryGB;
+                                const { min } = memoryInfo;
+
+                                if (finalValue < min) {
+                                  finalValue = min;
+                                }
+
+                                finalValue = Math.round(finalValue / 0.25) * 0.25;
+                                finalValue = Math.max(min, finalValue);
+
+                                if (finalValue !== config.memoryGB) {
+                                  handleVcpuMemoryChange(config.id, "memoryGB", finalValue);
+                                }
+                                handleCellBlur();
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                              className={`h-8 text-sm ${memoryInfo && !memoryInfo.isValid ? "border-red-500" : ""
                                 }`}
                               min={memoryInfo?.min || 1}
                               max={memoryInfo?.max || 384}
@@ -1046,25 +1088,21 @@ export default function SpreadsheetCalculator() {
                           </div>
                         ) : (
                           <button
-                            onClick={() =>
-                              handleCellClick(config.id, "memoryGB")
-                            }
+                            onClick={() => handleCellClick(config.id, "memoryGB")}
                             disabled={!supportsCustom}
                             className="text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 transition-colors w-full disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <div className="flex items-center gap-1">
                               {config.memoryGB}
                               {memoryInfo && !memoryInfo.isValid && (
-                                <span className="text-red-500 text-xs">⚠</span>
+                                <span className="text-red-500 text-xs">⚠️</span>
                               )}
                             </div>
-                            {seriesSupportsExtendedMemory(config.series) &&
-                              config.isCustom && (
-                                <div className="text-xs text-muted-foreground">
-                                  {memoryInfo &&
-                                    `${memoryInfo.min}-${memoryInfo.max}`}
-                                </div>
-                              )}
+                            {seriesSupportsExtendedMemory(config.series) && config.isCustom && (
+                              <div className="text-xs text-muted-foreground">
+                                {memoryInfo && `${memoryInfo.min}-${memoryInfo.max}`}
+                              </div>
+                            )}
                           </button>
                         )}
                       </td>
