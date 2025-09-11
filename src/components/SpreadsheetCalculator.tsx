@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { useVmStore, LinkLoadingState } from "@/store/vmStore";
 import {
   REGIONS,
@@ -163,7 +164,7 @@ export default function SpreadsheetCalculator() {
           [linkType]: result.shareUrl,
         };
         updateConfiguration(config.id, { links: linkUpdate });
-        console.log(
+        toast.success(
           `Successfully generated ${commitment} link for ${config.name}`
         );
       } else {
@@ -171,8 +172,8 @@ export default function SpreadsheetCalculator() {
       }
     } catch (error) {
       console.error(`Failed to generate ${commitment} link:`, error);
-      alert(
-        `Error generating link: ${
+      toast.error(
+        `Failed to generate ${commitment} link: ${
           error instanceof Error ? error.message : "Unknown error"
         }`
       );
@@ -202,7 +203,7 @@ export default function SpreadsheetCalculator() {
       // Generate all links in parallel
       const promises = commitmentTypes.map(async (commitment) => {
         try {
-          console.log(`Generating ${commitment} link for ${config.name}...`);
+          // Using console.log for debugging, toast would be too noisy for each parallel request
 
           // Create an enhanced config with the commitment information
           const configWithCommitment = {
@@ -274,25 +275,29 @@ export default function SpreadsheetCalculator() {
 
       // Show summary
       if (successCount === commitmentTypes.length) {
-        alert(`✅ Successfully generated all ${successCount} links!`);
+        toast.success(
+          `Successfully generated all ${successCount} links for ${config.name}!`
+        );
       } else if (successCount > 0) {
-        alert(
-          `⚠️ Generated ${successCount}/${
-            commitmentTypes.length
-          } links. Errors: ${errorMessages.join("; ")}`
+        toast.warning(
+          `Generated ${successCount}/${commitmentTypes.length} links for ${config.name}`,
+          {
+            description: `Errors: ${errorMessages.join("; ")}`,
+            duration: 6000,
+          }
         );
       } else {
-        alert(
-          `❌ Failed to generate any links. Errors: ${errorMessages.join("; ")}`
-        );
+        toast.error(`Failed to generate any links for ${config.name}`, {
+          description: `Errors: ${errorMessages.join("; ")}`,
+          duration: 6000,
+        });
       }
     } catch (error) {
       console.error("Error in parallel link generation:", error);
-      alert(
-        `Error generating links: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      toast.error(`Error generating links for ${config.name}`, {
+        description: error instanceof Error ? error.message : "Unknown error",
+        duration: 6000,
+      });
     } finally {
       // Clear all loading states
       commitmentTypes.forEach((commitment) => {
@@ -413,7 +418,9 @@ export default function SpreadsheetCalculator() {
     );
 
     if (selectedConfigs.length === 0) {
-      alert("Please select at least one configuration to generate bulk links.");
+      toast.warning(
+        "Please select at least one configuration to generate bulk links."
+      );
       return;
     }
 
@@ -432,8 +439,8 @@ export default function SpreadsheetCalculator() {
     });
 
     try {
-      console.log(
-        `🚀 Starting bulk link generation for ${selectedConfigs.length} configurations...`
+      toast.info(
+        `Starting bulk link generation for ${selectedConfigs.length} configurations...`
       );
 
       // Create all promises for parallel execution
@@ -495,8 +502,7 @@ export default function SpreadsheetCalculator() {
         })
       );
 
-      // Execute all promises in parallel
-      console.log(`📡 Executing ${allPromises.length} parallel requests...`);
+      // Execute all promises in parallel (keeping console.log for debugging)
       const results = await Promise.all(allPromises);
 
       // Process results and update configurations
@@ -539,8 +545,9 @@ export default function SpreadsheetCalculator() {
       // Show detailed summary
       const totalRequests = selectedConfigs.length * commitmentTypes.length;
       if (totalSuccessCount === totalRequests) {
-        alert(
-          `🎉 Bulk generation complete! Successfully generated all ${totalSuccessCount} links for ${selectedConfigs.length} configurations.`
+        toast.success(
+          `Bulk generation complete! Successfully generated all ${totalSuccessCount} links for ${selectedConfigs.length} configurations.`,
+          { duration: 5000 }
         );
       } else if (totalSuccessCount > 0) {
         const errorDetails = Object.entries(errorsByConfig)
@@ -550,9 +557,10 @@ export default function SpreadsheetCalculator() {
           })
           .join("\n");
 
-        alert(
-          `⚠️ Bulk generation completed with partial success!\n\n✅ Success: ${totalSuccessCount}/${totalRequests} links\n❌ Errors: ${totalErrorCount}\n\nError details:\n${errorDetails}`
-        );
+        toast.warning(`Bulk generation completed with partial success!`, {
+          description: `Success: ${totalSuccessCount}/${totalRequests} links. Errors: ${totalErrorCount}`,
+          duration: 8000,
+        });
       } else {
         const errorDetails = Object.entries(errorsByConfig)
           .map(([configId, errors]) => {
@@ -561,17 +569,17 @@ export default function SpreadsheetCalculator() {
           })
           .join("\n");
 
-        alert(
-          `❌ Bulk generation failed for all configurations.\n\nError details:\n${errorDetails}`
-        );
+        toast.error(`Bulk generation failed for all configurations.`, {
+          description: "Check console for detailed error information",
+          duration: 8000,
+        });
       }
     } catch (error) {
       console.error("Error in bulk link generation:", error);
-      alert(
-        `Error in bulk link generation: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      toast.error("Error in bulk link generation", {
+        description: error instanceof Error ? error.message : "Unknown error",
+        duration: 8000,
+      });
     } finally {
       // Clear all loading states
       selectedConfigs.forEach((config) => {
