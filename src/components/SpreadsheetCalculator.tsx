@@ -44,7 +44,7 @@ interface EditingCell {
   field: string;
 }
 
-type CommitmentType = "none" | "1-year" | "3-years";
+type CommitmentType = "on-demand" | "1-year" | "3-years";
 
 export default function SpreadsheetCalculator() {
   const {
@@ -100,7 +100,7 @@ export default function SpreadsheetCalculator() {
       os: "linux",
       sqlLicense: "none",
       provisioningModel: "regular",
-      commitment: "none",
+      commitment: "on-demand",
     });
   };
 
@@ -126,7 +126,7 @@ export default function SpreadsheetCalculator() {
     enableDebug: boolean = false
   ) => {
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
-      none: "onDemand",
+      "on-demand": "onDemand",
       "1-year": "oneYear",
       "3-years": "threeYear",
     };
@@ -187,9 +187,9 @@ export default function SpreadsheetCalculator() {
     config: VmConfig,
     enableDebug: boolean = false
   ) => {
-    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-years"];
+    const commitmentTypes: CommitmentType[] = ["on-demand", "1-year", "3-years"];
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
-      none: "onDemand",
+      "on-demand": "onDemand",
       "1-year": "oneYear",
       "3-years": "threeYear",
     };
@@ -424,9 +424,9 @@ export default function SpreadsheetCalculator() {
       return;
     }
 
-    const commitmentTypes: CommitmentType[] = ["none", "1-year", "3-years"];
+    const commitmentTypes: CommitmentType[] = ["on-demand", "1-year", "3-years"];
     const linkTypeMap: Record<CommitmentType, keyof LinkLoadingState> = {
-      none: "onDemand",
+      "on-demand": "onDemand",
       "1-year": "oneYear",
       "3-years": "threeYear",
     };
@@ -1567,7 +1567,7 @@ export default function SpreadsheetCalculator() {
                       <td className="p-3">
                         <LinkCell
                           config={config}
-                          commitment="none"
+                          commitment="on-demand"
                           loading={currentLoading.onDemand}
                           onGenerate={handleGenerateLink}
                         />
@@ -1633,7 +1633,7 @@ function LinkCell({
   onGenerate: (config: VmConfig, commitment: CommitmentType) => void;
 }) {
   const linkTypeMap = {
-    none: "onDemand" as const,
+    "on-demand": "onDemand" as const,
     "1-year": "oneYear" as const,
     "3-years": "threeYear" as const,
   };
