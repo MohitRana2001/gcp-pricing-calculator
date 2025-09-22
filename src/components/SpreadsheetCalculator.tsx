@@ -38,6 +38,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { Label } from "./ui/label";
 
 interface EditingCell {
   configId: string;
@@ -52,6 +54,8 @@ export default function SpreadsheetCalculator() {
     selectedIds,
     dataLoaded,
     loadingLinks,
+    currency,
+    setCurrency,
     addConfiguration,
     removeConfiguration,
     updateConfiguration,
@@ -145,6 +149,7 @@ export default function SpreadsheetCalculator() {
         body: JSON.stringify({
           configurations: [configWithCommitment],
           commitment: commitment,
+          currency: currency,
           options: {
             debug: enableDebug,
             timeout: 60000,
@@ -173,8 +178,7 @@ export default function SpreadsheetCalculator() {
     } catch (error) {
       console.error(`Failed to generate ${commitment} link:`, error);
       toast.error(
-        `Failed to generate ${commitment} link: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to generate ${commitment} link: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -591,9 +595,9 @@ export default function SpreadsheetCalculator() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", {
       style: "currency",
-      currency: "USD",
+      currency: currency,
       minimumFractionDigits: 2,
     }).format(amount);
   };
@@ -632,6 +636,20 @@ export default function SpreadsheetCalculator() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <RadioGroup
+            defaultValue="USD"
+            onValueChange={(value: "USD" | "INR") => setCurrency(value)}
+            className="flex items-center space-x-2"
+          >
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="USD" id="r1" />
+              <Label htmlFor="r1">USD</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="INR" id="r2" />
+              <Label htmlFor="r2">INR</Label>
+            </div>
+          </RadioGroup>
           {/* Bulk Generation Button */}
           <Button
             variant="default"
@@ -793,9 +811,8 @@ export default function SpreadsheetCalculator() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
-                      className={`border-t hover:bg-muted/25 transition-colors ${
-                        selectedIds.has(config.id) ? "bg-muted/50" : ""
-                      }`}
+                      className={`border-t hover:bg-muted/25 transition-colors ${selectedIds.has(config.id) ? "bg-muted/50" : ""
+                        }`}
                       onMouseEnter={() => setHoveredRow(config.id)}
                       onMouseLeave={() => setHoveredRow(null)}
                     >
@@ -1155,7 +1172,7 @@ export default function SpreadsheetCalculator() {
                       {/* Memory (GB) */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "memoryGB" ? (
+                          editingCell?.field === "memoryGB" ? (
                           <div>
                             <Input
                               type="text"
@@ -1233,16 +1250,14 @@ export default function SpreadsheetCalculator() {
                                 if (e.key === "Enter")
                                   (e.target as HTMLInputElement).blur();
                               }}
-                              className={`h-8 text-sm ${
-                                memoryInfo && !memoryInfo.isValid
+                              className={`h-8 text-sm ${memoryInfo && !memoryInfo.isValid
                                   ? "border-red-500"
                                   : ""
-                              }`}
+                                }`}
                               disabled={!supportsCustom}
                               autoFocus
-                              placeholder={`${memoryInfo?.min || 1}-${
-                                memoryInfo?.max || 384
-                              } GB (0.25 increments)`}
+                              placeholder={`${memoryInfo?.min || 1}-${memoryInfo?.max || 384
+                                } GB (0.25 increments)`}
                             />
                             {memoryInfo && (
                               <div className="text-xs text-muted-foreground mt-1">
@@ -1292,7 +1307,7 @@ export default function SpreadsheetCalculator() {
                       {/* Running Hours */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "runningHours" ? (
+                          editingCell?.field === "runningHours" ? (
                           <Input
                             type="text"
                             value={config.runningHours}
@@ -1353,7 +1368,7 @@ export default function SpreadsheetCalculator() {
                       {/* Quantity */}
                       <td className="p-3">
                         {editingCell?.configId === config.id &&
-                        editingCell?.field === "quantity" ? (
+                          editingCell?.field === "quantity" ? (
                           <Input
                             type="text"
                             value={config.quantity}

@@ -1,3 +1,7 @@
+import { useVmStore } from '@/store/vmStore';
+import customPricingDataRaw from '../../public/data/custom-extended.json';
+import machineData from '../../public/data/machine-data.json';
+
 export interface VmConfig {
   id: string
   name: string
@@ -394,6 +398,7 @@ function getWindowsCost(machineName: string, runningHours: number, vcpus: number
 }
 
 export function getPricing(config: VmConfig): PricingDetails {
+  const { currency, exchangeRate } = useVmStore.getState();
   let onDemand = 0;
   let cud1y = 0;
   let cud3y = 0;
@@ -527,13 +532,41 @@ export function getPricing(config: VmConfig): PricingDetails {
 
   console.log(extendedMemoryCostOnDemand, onDemand , osOnDemand ,sqlLicenseCost, extendedMemoryCostOnDemand);
 
+  let finalOnDemand = onDemand;
+  let finalCud1y = cud1y;
+  let finalCud3y = cud3y;
+  let finalOsOnDemand = osOnDemand;
+  let finalOs1yCud = os1yCud;
+  let finalOs3yCud = os3yCud;
+  let finalSqlLicenseCost = sqlLicenseCost;
+  let finalExtendedMemoryCostOnDemand = extendedMemoryCostOnDemand;
+  let finalExtendedMemoryCost1y = extendedMemoryCost1y;
+  let finalExtendedMemoryCost3y = extendedMemoryCost3y;
+
+  if (currency === "INR") {
+    finalOnDemand *= exchangeRate;
+    finalCud1y *= exchangeRate;
+    finalCud3y *= exchangeRate;
+    finalOsOnDemand *= exchangeRate;
+    finalOs1yCud *= exchangeRate;
+    finalOs3yCud *= exchangeRate;
+    finalSqlLicenseCost *= exchangeRate;
+    finalExtendedMemoryCostOnDemand *= exchangeRate;
+    finalExtendedMemoryCost1y *= exchangeRate;
+    finalExtendedMemoryCost3y *= exchangeRate;
+  }
+
   return {
-    onDemand, cud1y, cud3y,
-    osOnDemand, os1yCud, os3yCud,
-    sqlLicenseCost,
-    onDemandInclusive: (sqlLicenseCost != 0) ? onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCostOnDemand : onDemand + osOnDemand + sqlLicenseCost + extendedMemoryCostOnDemand,
-    cud1yInclusive: cud1y + os1yCud + sqlLicenseCost + extendedMemoryCost1y,
-    cud3yInclusive: cud3y + os3yCud + sqlLicenseCost + extendedMemoryCost3y,
+    onDemand: finalOnDemand,
+    cud1y: finalCud1y,
+    cud3y: finalCud3y,
+    osOnDemand: finalOsOnDemand,
+    os1yCud: finalOs1yCud,
+    os3yCud: finalOs3yCud,
+    sqlLicenseCost: finalSqlLicenseCost,
+    onDemandInclusive: (finalSqlLicenseCost != 0) ? finalOnDemand + finalOsOnDemand + finalSqlLicenseCost + finalExtendedMemoryCostOnDemand : finalOnDemand + finalOsOnDemand + finalSqlLicenseCost + finalExtendedMemoryCostOnDemand,
+    cud1yInclusive: finalCud1y + finalOs1yCud + finalSqlLicenseCost + finalExtendedMemoryCost1y,
+    cud3yInclusive: finalCud3y + finalOs3yCud + finalSqlLicenseCost + finalExtendedMemoryCost3y,
   };
 }
 

@@ -18,6 +18,8 @@ interface VmStore {
   selectedIds: Set<string>
   dataLoaded: boolean
   loadingLinks: Record<string, LinkLoadingState>; // To track loading state for each config's links
+  currency: "USD" | "INR";
+  exchangeRate: number; 
 
   addConfiguration: (config: Omit<VmConfig, 'id' | 'estimatedCost' | 'onDemandCost' | 'savings'>) => void
   removeConfiguration: (id: string) => void
@@ -25,6 +27,7 @@ interface VmStore {
   updateConfiguration: (id: string, updates: Partial<VmConfig>) => void
   setLinkLoadingState: (configId: string, linkType: keyof LinkLoadingState, isLoading: boolean) => void;
 
+  setCurrency: (currency: "USD" | "INR") => void;
   duplicateConfiguration: (id: string) => void
   duplicateMultipleConfigurations: (ids: string[]) => void
 
@@ -304,7 +307,9 @@ export const useVmStore = create<VmStore>((set, get) => ({
   selectedIds: new Set<string>(),
   dataLoaded: false,
   loadingLinks: {},
-
+  currency: "USD",
+  exchangeRate: 88.29,
+  setCurrency: (currency) => set({ currency }),
   // Cloud Storage & SQL (placeholders)
   storageConfigurations: [],
   sqlConfigurations: [],

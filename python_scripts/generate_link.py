@@ -24,6 +24,12 @@ def generate_single_link(auth_token, f_sid, bl_version, config):
         modified_freq = f_req_template.replace("FORM_ID_UUID", form_id_uuid)
         modified_freq = modified_freq.replace("ESTIMATE_ID_UUID", estimate_id_uuid)
         
+        if "currency" in config:
+            currency_code = config["currency"]
+            print(f"--> Setting currency to: {currency_code}", file=sys.stderr)
+            modified_freq = modified_freq.replace('\\"USD\\"', f'\\"{currency_code}\\"')
+
+        
         # 1. Quantity (Number of Instances)
         modified_freq = modified_freq.replace(
             ',[null,null,null,null,null,null,null,null,null,1],\\"Number of Instances\\"',
