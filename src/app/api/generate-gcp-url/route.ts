@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
+import { Currency } from 'lucide-react';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { configurations, commitment = "none" } = body;
+    const { configurations, commitment = "none", currency = "USD" } = body;
     
     // We'll use the first configuration from the spreadsheet row
     const config = configurations[0];
@@ -20,7 +21,8 @@ export async function POST(req: NextRequest) {
       provisioningModel: config.provisioningModel || 'regular',
       runningHours: config.runningHours || 730,
       quantity: config.quantity || 1,
-      commitment: commitment // Add commitment to the config
+      commitment: commitment,
+      currency: currency,
     };
 
     console.log('Enhanced configuration:', enhancedConfig);
